@@ -1,0 +1,98 @@
+* { box-sizing: border-box; }
+:root {
+  color-scheme: dark; font-family: "Geist", "Segoe UI", "Microsoft JhengHei", sans-serif;
+  --bg: #10151a; --panel: #192127; --sidebar: #131b20; --border: #34434a;
+  --text: #f0f5f4; --muted: #a9bbc0; --accent: #c1f483; --ink: #142315;
+  background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.55;
+}
+body { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button, input, select, textarea { border: 1px solid var(--border); border-radius: 8px; background: #121a1f; }
+button { padding: 8px 12px; font-weight: 650; cursor: pointer; min-height: 40px; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+:focus-visible { outline: 2px solid #d7c5ff; outline-offset: 3px; }
+input, select, textarea { min-width: 0; padding: 8px 10px; }
+textarea { width: 100%; resize: vertical; }
+input[type="checkbox"] { accent-color: var(--accent); }
+h1,h2,h3,p { margin: 0; }
+h1 { font-size: clamp(1.85rem, 4vw, 2.8rem); letter-spacing: -.035em; line-height: 1.2; }
+h2 { font-size: 1.18rem; line-height: 1.35; }
+h3 { font-size: 1.04rem; }
+small,.muted { color: var(--muted); }
+.app { min-height: 100vh; display: grid; grid-template-columns: 190px minmax(0,1fr); }
+.sidebar { background: var(--sidebar); border-right: 1px solid var(--border); padding: 25px 14px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 750; line-height: 1.15; margin: 0 4px 36px; }
+.logo { display: grid; place-items: center; background: var(--accent); color: var(--ink); font-size: 24px; width: 42px; height: 42px; border-radius: 11px; }
+nav { display: grid; gap: 6px; }
+nav button { text-align: left; border-color: transparent; background: transparent; color: var(--muted); }
+nav button span { display: inline-block; width: 22px; }
+nav [aria-current] { background: #26352a; color: var(--accent); }
+main { width: 100%; max-width: 1400px; padding: 18px 26px 56px; margin-inline: auto; min-width: 0; }
+.status { min-height: 27px; color: var(--muted); font-size: .85rem; margin-bottom: 8px; }
+.status .success { color: var(--accent); }
+.status .error { color: #ffb7b9; }
+.heading { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 22px; }
+.heading p { color: var(--muted); margin-top: 7px; }
+.badge { color: var(--accent); border: 1px solid #476142; background: #1c2b20; padding: 4px 10px; border-radius: 999px; white-space: nowrap; font-size: .85rem; }
+.panel { min-width: 0; border: 1px solid var(--border); border-radius: 14px; padding: 18px; background: var(--panel); }
+.filters { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)) auto; gap: 10px; align-items: end; }
+.check { grid-column: 1/-1; font-size: .86rem; color: var(--muted); }
+.field { display: grid; min-width: 0; gap: 5px; font-size: .9rem; color: var(--muted); }
+.field :is(select,input,textarea) { color: var(--text); }
+.primary { background: var(--accent); color: var(--ink); border-color: var(--accent); }
+.primary:hover:not(:disabled) { background: #d6fba9; }
+.practice-grid,.settings-grid { margin-top: 15px; display: grid; gap: 15px; align-items: start; }
+.practice-grid { grid-template-columns: minmax(205px,1fr) minmax(0,2.25fr); }
+.settings-grid { grid-template-columns: 1fr 1fr; }
+.reason { margin: 8px 0 13px; color: var(--muted); font-size: .9rem; }
+.candidate { display: grid; gap: 4px; width: 100%; text-align: left; margin-top: 8px; overflow-wrap: anywhere; }
+[aria-pressed="true"] { border-color: #759a5e; background: #25362a; color: var(--accent); }
+.row { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.title-row { justify-content: space-between; align-items: start; margin-bottom: 13px; }
+.title-row p { font-size: .85rem; margin-top: 4px; }
+.text-button { color: var(--accent); }
+.mode-row { margin-top: 12px; }
+.segment { display: flex; gap: 4px; padding: 3px; background: #10171b; border: 1px solid var(--border); border-radius: 9px; }
+.segment button { min-height: 34px; padding: 4px 10px; border-color: transparent; font-size: .86rem; }
+.section { border-top: 1px solid var(--border); padding-top: 13px; margin-top: 15px; }
+summary { cursor: pointer; font-weight: 650; }
+details .field,.settings-grid .field { margin-top: 10px; }
+details button { margin-top: 8px; }
+.settings-grid p { margin-top: 6px; font-size: .86rem; }
+.editor,.code-block { font-family: "IBM Plex Mono", Consolas, monospace; font-size: .91rem; }
+.chat { display: grid; gap: 15px; }
+.chat:not(:empty) { margin-top: 13px; }
+.exchange { display: grid; gap: 6px; }
+.turn { border-radius: 9px; background: #222c35; padding: 11px 13px; }
+.turn.user { background: #25332c; }
+.turn > strong { display: block; margin-bottom: 3px; font-size: .84rem; }
+.markdown { min-width: 0; }
+.markdown { overflow-wrap: anywhere; }
+.markdown :is(p,ul,ol,blockquote,h1,h2,h3) { margin: 6px 0; }
+.markdown h1 { font-size: 1.3rem; }
+.markdown h2 { font-size: 1.12rem; }
+.markdown blockquote { color: var(--muted); border-left: 2px solid var(--border); padding-left: 10px; }
+.markdown :not(pre) > code { border-radius: 4px; background: #11171c; padding: 1px 4px; }
+.code-block { border: 1px solid var(--border); border-radius: 8px; background: #11171c; margin: 8px 0; padding: 10px; overflow-x: auto; }
+.action-row { margin-top: 10px; }
+.question-status { color: var(--accent); font-size: .9rem; font-weight: 650; }
+.question-status:empty { display: none; }
+.note-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; margin-top: 9px; }
+.note-editor { margin-top: 9px; }
+.danger { color: #ffb7b9; }
+.danger:hover:not(:disabled) { border-color: #ffb7b9; }
+.path { overflow-wrap: anywhere; font-size: .9rem; }
+@media (max-width: 1050px) {
+  .app { grid-template-columns: 146px minmax(0,1fr); }
+  main { padding-inline: 17px; }
+  .filters { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .practice-grid { grid-template-columns: minmax(175px,1fr) minmax(0,2fr); }
+}
+@media (max-width: 860px) {
+  .practice-grid,.settings-grid { grid-template-columns: minmax(0,1fr); }
+}
+
+.modal-backdrop { position: fixed; inset: 0; background: #080c11c9; display: grid; place-items: center; padding: 16px; }
+.plan-dialog { width: min(100%, 435px); box-shadow: 0 16px 45px #0008; }
+.plan-dialog p { margin: 9px 0 16px; }

@@ -1,0 +1,6 @@
+.quantum-settings.json
+notes/
+node_modules/
+dist/
+src-tauri/target/
+/Quantum Algorithm.exe

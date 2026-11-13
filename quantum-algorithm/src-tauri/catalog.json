@@ -1,0 +1,842 @@
+{
+  "problems": [
+    {
+      "id": "lc:binary-search",
+      "platform": "lc",
+      "title": "Binary Search",
+      "topic": "binary",
+      "level": 1,
+      "focus": "boundary",
+      "hint": "先用只含一個元素的陣列，確認區間何時變空。",
+      "url": "https://leetcode.com/problems/binary-search/",
+      "tags": [
+        "array"
+      ]
+    },
+    {
+      "id": "lc:search-insert-position",
+      "platform": "lc",
+      "title": "Search Insert Position",
+      "topic": "binary",
+      "level": 2,
+      "focus": "boundary",
+      "hint": "當目標不存在時，哪個指標能代表插入位置？先試比所有元素都大的目標。",
+      "url": "https://leetcode.com/problems/search-insert-position/",
+      "tags": [
+        "array"
+      ]
+    },
+    {
+      "id": "lc:find-first-and-last-position-of-element-in-sorted-array",
+      "platform": "lc",
+      "title": "Find First and Last Position of Element in Sorted Array",
+      "topic": "binary",
+      "level": 4,
+      "focus": "boundary",
+      "hint": "用 [2, 2, 2] 追蹤每一步，想想找到相同值時哪一側還不能丟。",
+      "url": "https://leetcode.com/problems/find-first-and-last-position-of-element-in-sorted-array/",
+      "tags": [
+        "array"
+      ]
+    },
+    {
+      "id": "lc:koko-eating-bananas",
+      "platform": "lc",
+      "title": "Koko Eating Bananas",
+      "topic": "binary",
+      "level": 5,
+      "focus": "model",
+      "hint": "如果速度 k 可行，更快的速度會怎樣？",
+      "url": "https://leetcode.com/problems/koko-eating-bananas/",
+      "tags": [
+        "array"
+      ]
+    },
+    {
+      "id": "lc:two-sum",
+      "platform": "lc",
+      "title": "Two Sum",
+      "topic": "hash",
+      "level": 2,
+      "focus": "implementation",
+      "hint": "掃描到一個值時，先問已經看過的值中缺哪個數。試試 [3, 3]。",
+      "url": "https://leetcode.com/problems/two-sum/",
+      "tags": [
+        "array"
+      ]
+    },
+    {
+      "id": "lc:contains-duplicate",
+      "platform": "lc",
+      "title": "Contains Duplicate",
+      "topic": "hash",
+      "level": 1,
+      "focus": "complexity",
+      "hint": "每次都掃過先前的元素會花多久？有什麼資料結構能直接回答「看過嗎」？",
+      "url": "https://leetcode.com/problems/contains-duplicate/",
+      "tags": [
+        "array",
+        "sorting"
+      ]
+    },
+    {
+      "id": "lc:group-anagrams",
+      "platform": "lc",
+      "title": "Group Anagrams",
+      "topic": "hash",
+      "level": 4,
+      "focus": "model",
+      "hint": "哪一種表示法能讓兩個互為重排的字串得到同樣的鍵？",
+      "url": "https://leetcode.com/problems/group-anagrams/",
+      "tags": [
+        "array",
+        "string",
+        "sorting"
+      ]
+    },
+    {
+      "id": "lc:climbing-stairs",
+      "platform": "lc",
+      "title": "Climbing Stairs",
+      "topic": "dp",
+      "level": 2,
+      "focus": "state",
+      "hint": "到第 n 階的最後一步可能從哪兩個位置出發？",
+      "url": "https://leetcode.com/problems/climbing-stairs/",
+      "tags": [
+        "math",
+        "memoization"
+      ]
+    },
+    {
+      "id": "lc:house-robber",
+      "platform": "lc",
+      "title": "House Robber",
+      "topic": "dp",
+      "level": 4,
+      "focus": "state",
+      "hint": "考慮最後一間房子有搶與沒搶兩種情況，各自能接在哪個子問題上？",
+      "url": "https://leetcode.com/problems/house-robber/",
+      "tags": [
+        "array"
+      ]
+    },
+    {
+      "id": "lc:coin-change",
+      "platform": "lc",
+      "title": "Coin Change",
+      "topic": "dp",
+      "level": 5,
+      "focus": "state",
+      "hint": "先定義「湊出金額 x」的答案，再考慮最後加入的那枚硬幣。",
+      "url": "https://leetcode.com/problems/coin-change/",
+      "tags": [
+        "array",
+        "breadth-first-search"
+      ]
+    },
+    {
+      "id": "lc:best-time-to-buy-and-sell-stock",
+      "platform": "lc",
+      "title": "Best Time to Buy and Sell Stock",
+      "topic": "greedy",
+      "level": 2,
+      "focus": "invariant",
+      "hint": "如果今天賣出，到今天之前最值得記下哪一個數？",
+      "url": "https://leetcode.com/problems/best-time-to-buy-and-sell-stock/",
+      "tags": [
+        "array",
+        "dp"
+      ]
+    },
+    {
+      "id": "lc:jump-game",
+      "platform": "lc",
+      "title": "Jump Game",
+      "topic": "greedy",
+      "level": 4,
+      "focus": "invariant",
+      "hint": "掃描到某個索引時，如何知道它本身是可達的？",
+      "url": "https://leetcode.com/problems/jump-game/",
+      "tags": [
+        "array",
+        "dp"
+      ]
+    },
+    {
+      "id": "cf:474/B",
+      "platform": "cf",
+      "title": "Worms",
+      "topic": "binary",
+      "level": 3,
+      "focus": "boundary",
+      "hint": "用每堆最後一隻蟲的編號建立界線。詢問值剛好等於界線時應屬哪堆？",
+      "url": "https://codeforces.com/problemset/problem/474/B/",
+      "tags": [
+        "array",
+        "prefix-sum"
+      ]
+    },
+    {
+      "id": "cf:706/B",
+      "platform": "cf",
+      "title": "Interesting Drink",
+      "topic": "binary",
+      "level": 3,
+      "focus": "boundary",
+      "hint": "排序後，第一個大於預算的位置代表什麼？",
+      "url": "https://codeforces.com/problemset/problem/706/B/",
+      "tags": [
+        "array",
+        "sorting"
+      ]
+    },
+    {
+      "id": "cf:670/D1",
+      "platform": "cf",
+      "title": "Magic Powder - 1",
+      "topic": "binary",
+      "level": 5,
+      "focus": "model",
+      "hint": "先假設要做固定數量的餅乾，如何判斷原料夠不夠？",
+      "url": "https://codeforces.com/problemset/problem/670/D1/",
+      "tags": [
+        "math"
+      ]
+    },
+    {
+      "id": "cf:4/C",
+      "platform": "cf",
+      "title": "Registration System",
+      "topic": "hash",
+      "level": 3,
+      "focus": "implementation",
+      "hint": "為每個原始名稱記住一個數字。這個數字代表已用次數還是下一個尾碼？",
+      "url": "https://codeforces.com/problemset/problem/4/C/",
+      "tags": [
+        "string"
+      ]
+    },
+    {
+      "id": "cf:236/A",
+      "platform": "cf",
+      "title": "Boy or Girl",
+      "topic": "hash",
+      "level": 1,
+      "focus": "complexity",
+      "hint": "題目在乎出現次數，還是出現過哪些字元？",
+      "url": "https://codeforces.com/problemset/problem/236/A/",
+      "tags": [
+        "string"
+      ]
+    },
+    {
+      "id": "cf:455/A",
+      "platform": "cf",
+      "title": "Boredom",
+      "topic": "dp",
+      "level": 5,
+      "focus": "state",
+      "hint": "先按值統計頻率。選取某個值會影響哪些其他值？",
+      "url": "https://codeforces.com/problemset/problem/455/A/",
+      "tags": [
+        "array"
+      ]
+    },
+    {
+      "id": "cf:189/A",
+      "platform": "cf",
+      "title": "Cut Ribbon",
+      "topic": "dp",
+      "level": 4,
+      "focus": "state",
+      "hint": "如何區分長度為零的合法起點，以及一個根本切不出的長度？",
+      "url": "https://codeforces.com/problemset/problem/189/A/",
+      "tags": [
+        "math"
+      ]
+    },
+    {
+      "id": "cf:160/A",
+      "platform": "cf",
+      "title": "Twins",
+      "topic": "greedy",
+      "level": 2,
+      "focus": "invariant",
+      "hint": "若只允許拿 k 枚，怎麼讓手上的總額最大？",
+      "url": "https://codeforces.com/problemset/problem/160/A/",
+      "tags": [
+        "array",
+        "sorting"
+      ]
+    },
+    {
+      "id": "cf:230/A",
+      "platform": "cf",
+      "title": "Dragons",
+      "topic": "greedy",
+      "level": 3,
+      "focus": "boundary",
+      "hint": "先挑哪隻龍比較容易？注意力量剛好相等時的規則。",
+      "url": "https://codeforces.com/problemset/problem/230/A/",
+      "tags": [
+        "array",
+        "sorting"
+      ]
+    },
+    {
+      "id": "lc:valid-parentheses",
+      "title": "Valid Parentheses",
+      "topic": "stack",
+      "level": 1,
+      "tags": [
+        "string"
+      ],
+      "focus": "boundary",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/valid-parentheses/"
+    },
+    {
+      "id": "lc:valid-anagram",
+      "title": "Valid Anagram",
+      "topic": "string",
+      "level": 2,
+      "tags": [
+        "hash",
+        "counting",
+        "sorting"
+      ],
+      "focus": "model",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/valid-anagram/"
+    },
+    {
+      "id": "lc:merge-two-sorted-lists",
+      "title": "Merge Two Sorted Lists",
+      "topic": "linked-list",
+      "level": 2,
+      "tags": [
+        "recursion"
+      ],
+      "focus": "boundary",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/merge-two-sorted-lists/"
+    },
+    {
+      "id": "lc:maximum-depth-of-binary-tree",
+      "title": "Maximum Depth of Binary Tree",
+      "topic": "binary-tree",
+      "level": 1,
+      "tags": [
+        "tree",
+        "depth-first-search",
+        "breadth-first-search",
+        "recursion"
+      ],
+      "focus": "state",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/maximum-depth-of-binary-tree/"
+    },
+    {
+      "id": "lc:range-sum-query-immutable",
+      "title": "Range Sum Query - Immutable",
+      "topic": "prefix-sum",
+      "level": 2,
+      "tags": [
+        "array",
+        "design"
+      ],
+      "focus": "boundary",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/range-sum-query-immutable/"
+    },
+    {
+      "id": "lc:best-time-to-buy-and-sell-stock-ii",
+      "title": "Best Time to Buy and Sell Stock II",
+      "topic": "greedy",
+      "level": 4,
+      "tags": [
+        "array",
+        "dp"
+      ],
+      "focus": "invariant",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/best-time-to-buy-and-sell-stock-ii/"
+    },
+    {
+      "id": "lc:binary-tree-level-order-traversal",
+      "title": "Binary Tree Level Order Traversal",
+      "topic": "breadth-first-search",
+      "level": 4,
+      "tags": [
+        "tree",
+        "binary-tree",
+        "queue"
+      ],
+      "focus": "state",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/binary-tree-level-order-traversal/"
+    },
+    {
+      "id": "lc:number-of-islands",
+      "title": "Number of Islands",
+      "topic": "graph",
+      "level": 4,
+      "tags": [
+        "matrix",
+        "depth-first-search",
+        "breadth-first-search",
+        "union-find"
+      ],
+      "focus": "state",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/number-of-islands/"
+    },
+    {
+      "id": "lc:course-schedule",
+      "title": "Course Schedule",
+      "topic": "topological-sort",
+      "level": 5,
+      "tags": [
+        "graph",
+        "depth-first-search",
+        "breadth-first-search"
+      ],
+      "focus": "invariant",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/course-schedule/"
+    },
+    {
+      "id": "lc:permutations",
+      "title": "Permutations",
+      "topic": "backtracking",
+      "level": 4,
+      "tags": [
+        "array",
+        "enumeration"
+      ],
+      "focus": "state",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/permutations/"
+    },
+    {
+      "id": "lc:implement-trie-prefix-tree",
+      "title": "Implement Trie (Prefix Tree)",
+      "topic": "trie",
+      "level": 4,
+      "tags": [
+        "string",
+        "design",
+        "hash"
+      ],
+      "focus": "model",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/implement-trie-prefix-tree/"
+    },
+    {
+      "id": "lc:daily-temperatures",
+      "title": "Daily Temperatures",
+      "topic": "monotonic-stack",
+      "level": 4,
+      "tags": [
+        "array",
+        "stack"
+      ],
+      "focus": "invariant",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/daily-temperatures/"
+    },
+    {
+      "id": "lc:kth-largest-element-in-an-array",
+      "title": "Kth Largest Element in an Array",
+      "topic": "quickselect",
+      "level": 5,
+      "tags": [
+        "array",
+        "divide-and-conquer",
+        "sorting",
+        "heap-priority-queue"
+      ],
+      "focus": "complexity",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/kth-largest-element-in-an-array/"
+    },
+    {
+      "id": "lc:binary-tree-inorder-traversal",
+      "title": "Binary Tree Inorder Traversal",
+      "topic": "binary-tree",
+      "level": 2,
+      "tags": [
+        "tree",
+        "stack",
+        "depth-first-search"
+      ],
+      "focus": "state",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/binary-tree-inorder-traversal/"
+    },
+    {
+      "id": "lc:longest-substring-without-repeating-characters",
+      "title": "Longest Substring Without Repeating Characters",
+      "topic": "sliding-window",
+      "level": 4,
+      "tags": [
+        "hash",
+        "string",
+        "two-pointers"
+      ],
+      "focus": "invariant",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/longest-substring-without-repeating-characters/"
+    },
+    {
+      "id": "lc:container-with-most-water",
+      "title": "Container With Most Water",
+      "topic": "two-pointers",
+      "level": 4,
+      "tags": [
+        "array",
+        "greedy"
+      ],
+      "focus": "invariant",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/container-with-most-water/"
+    },
+    {
+      "id": "lc:single-number",
+      "title": "Single Number",
+      "topic": "bit-manipulation",
+      "level": 2,
+      "tags": [
+        "array",
+        "math"
+      ],
+      "focus": "model",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/single-number/"
+    },
+    {
+      "id": "lc:reverse-linked-list",
+      "title": "Reverse Linked List",
+      "topic": "linked-list",
+      "level": 2,
+      "tags": [
+        "recursion"
+      ],
+      "focus": "invariant",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/reverse-linked-list/"
+    },
+    {
+      "id": "lc:lru-cache",
+      "title": "LRU Cache",
+      "topic": "design",
+      "level": 6,
+      "tags": [
+        "hash",
+        "linked-list",
+        "doubly-linked-list"
+      ],
+      "focus": "implementation",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/lru-cache/"
+    },
+    {
+      "id": "lc:network-delay-time",
+      "title": "Network Delay Time",
+      "topic": "shortest-path",
+      "level": 5,
+      "tags": [
+        "graph",
+        "heap-priority-queue"
+      ],
+      "focus": "state",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/network-delay-time/"
+    },
+    {
+      "id": "lc:min-cost-to-connect-all-points",
+      "title": "Min Cost to Connect All Points",
+      "topic": "minimum-spanning-tree",
+      "level": 5,
+      "tags": [
+        "array",
+        "union-find",
+        "graph"
+      ],
+      "focus": "model",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/min-cost-to-connect-all-points/"
+    },
+    {
+      "id": "lc:range-sum-query-mutable",
+      "title": "Range Sum Query - Mutable",
+      "topic": "segment-tree",
+      "level": 5,
+      "tags": [
+        "array",
+        "design",
+        "binary-indexed-tree"
+      ],
+      "focus": "state",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/range-sum-query-mutable/"
+    },
+    {
+      "id": "lc:find-median-from-data-stream",
+      "title": "Find Median from Data Stream",
+      "topic": "data-stream",
+      "level": 7,
+      "tags": [
+        "two-pointers",
+        "design",
+        "sorting",
+        "heap-priority-queue"
+      ],
+      "focus": "invariant",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/find-median-from-data-stream/"
+    },
+    {
+      "id": "lc:sliding-window-maximum",
+      "title": "Sliding Window Maximum",
+      "topic": "monotonic-queue",
+      "level": 7,
+      "tags": [
+        "array",
+        "queue",
+        "sliding-window",
+        "heap-priority-queue"
+      ],
+      "focus": "invariant",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/sliding-window-maximum/"
+    },
+    {
+      "id": "lc:trapping-rain-water",
+      "title": "Trapping Rain Water",
+      "topic": "two-pointers",
+      "level": 7,
+      "tags": [
+        "array",
+        "dp",
+        "stack",
+        "monotonic-stack"
+      ],
+      "focus": "model",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/trapping-rain-water/"
+    },
+    {
+      "id": "lc:median-of-two-sorted-arrays",
+      "title": "Median of Two Sorted Arrays",
+      "topic": "binary",
+      "level": 8,
+      "tags": [
+        "array",
+        "divide-and-conquer"
+      ],
+      "focus": "boundary",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/median-of-two-sorted-arrays/"
+    },
+    {
+      "id": "lc:minimum-window-substring",
+      "title": "Minimum Window Substring",
+      "topic": "sliding-window",
+      "level": 8,
+      "tags": [
+        "hash",
+        "string"
+      ],
+      "focus": "state",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/minimum-window-substring/"
+    },
+    {
+      "id": "lc:longest-valid-parentheses",
+      "title": "Longest Valid Parentheses",
+      "topic": "dp",
+      "level": 7,
+      "tags": [
+        "string",
+        "stack"
+      ],
+      "focus": "state",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/longest-valid-parentheses/"
+    },
+    {
+      "id": "lc:burst-balloons",
+      "title": "Burst Balloons",
+      "topic": "dp",
+      "level": 9,
+      "tags": [
+        "array"
+      ],
+      "focus": "state",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/burst-balloons/"
+    },
+    {
+      "id": "lc:word-search-ii",
+      "title": "Word Search II",
+      "topic": "trie",
+      "level": 8,
+      "tags": [
+        "array",
+        "string",
+        "backtracking",
+        "matrix"
+      ],
+      "focus": "complexity",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/word-search-ii/"
+    },
+    {
+      "id": "lc:merge-k-sorted-lists",
+      "title": "Merge k Sorted Lists",
+      "topic": "heap-priority-queue",
+      "level": 7,
+      "tags": [
+        "linked-list",
+        "divide-and-conquer",
+        "merge-sort"
+      ],
+      "focus": "complexity",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/merge-k-sorted-lists/"
+    },
+    {
+      "id": "lc:sum-of-distances-in-tree",
+      "title": "Sum of Distances in Tree",
+      "topic": "tree",
+      "level": 9,
+      "tags": [
+        "dp",
+        "depth-first-search",
+        "graph"
+      ],
+      "focus": "state",
+      "platform": "lc",
+      "hint": "",
+      "url": "https://leetcode.com/problems/sum-of-distances-in-tree/"
+    },
+    {
+      "id": "lc:big-countries",
+      "platform": "lc",
+      "title": "Big Countries",
+      "topic": "database",
+      "level": 1,
+      "focus": "boundary",
+      "hint": "",
+      "url": "https://leetcode.com/problems/big-countries/",
+      "tags": []
+    },
+    {
+      "id": "lc:combine-two-tables",
+      "platform": "lc",
+      "title": "Combine Two Tables",
+      "topic": "database",
+      "level": 2,
+      "focus": "model",
+      "hint": "",
+      "url": "https://leetcode.com/problems/combine-two-tables/",
+      "tags": []
+    },
+    {
+      "id": "lc:second-highest-salary",
+      "platform": "lc",
+      "title": "Second Highest Salary",
+      "topic": "database",
+      "level": 4,
+      "focus": "boundary",
+      "hint": "",
+      "url": "https://leetcode.com/problems/second-highest-salary/",
+      "tags": []
+    },
+    {
+      "id": "lc:department-top-three-salaries",
+      "platform": "lc",
+      "title": "Department Top Three Salaries",
+      "topic": "database",
+      "level": 7,
+      "focus": "state",
+      "hint": "",
+      "url": "https://leetcode.com/problems/department-top-three-salaries/",
+      "tags": []
+    },
+    {
+      "id": "lc:valid-phone-numbers",
+      "platform": "lc",
+      "title": "Valid Phone Numbers",
+      "topic": "shell",
+      "level": 2,
+      "focus": "boundary",
+      "hint": "",
+      "url": "https://leetcode.com/problems/valid-phone-numbers/",
+      "tags": []
+    },
+    {
+      "id": "lc:tenth-line",
+      "platform": "lc",
+      "title": "Tenth Line",
+      "topic": "shell",
+      "level": 1,
+      "focus": "boundary",
+      "hint": "",
+      "url": "https://leetcode.com/problems/tenth-line/",
+      "tags": []
+    },
+    {
+      "id": "lc:word-frequency",
+      "platform": "lc",
+      "title": "Word Frequency",
+      "topic": "shell",
+      "level": 5,
+      "focus": "implementation",
+      "hint": "",
+      "url": "https://leetcode.com/problems/word-frequency/",
+      "tags": []
+    }
+  ],
+  "focuses": {
+    "boundary": "邊界條件",
+    "invariant": "不變量",
+    "model": "題意轉換",
+    "complexity": "複雜度",
+    "state": "狀態定義",
+    "implementation": "實作細節"
+  }
+}

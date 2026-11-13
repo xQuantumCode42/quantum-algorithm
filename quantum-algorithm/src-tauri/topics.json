@@ -1,0 +1,372 @@
+{
+  "array": {
+    "name": "陣列",
+    "slug": "array",
+    "cf": "implementation"
+  },
+  "string": {
+    "name": "字串",
+    "slug": "string",
+    "cf": "strings"
+  },
+  "hash": {
+    "name": "雜湊表",
+    "slug": "hash-table",
+    "cf": "hashing"
+  },
+  "math": {
+    "name": "數學",
+    "slug": "math",
+    "cf": "math"
+  },
+  "dp": {
+    "name": "動態規劃",
+    "slug": "dynamic-programming",
+    "cf": "dp"
+  },
+  "sorting": {
+    "name": "排序",
+    "slug": "sorting",
+    "cf": "sortings"
+  },
+  "greedy": {
+    "name": "貪婪",
+    "slug": "greedy",
+    "cf": "greedy"
+  },
+  "binary": {
+    "name": "二分搜尋",
+    "slug": "binary-search",
+    "cf": "binary search"
+  },
+  "depth-first-search": {
+    "name": "深度優先搜尋",
+    "slug": "depth-first-search",
+    "cf": "dfs and similar"
+  },
+  "database": {
+    "name": "資料庫",
+    "slug": "database",
+    "cf": ""
+  },
+  "bit-manipulation": {
+    "name": "位元操作",
+    "slug": "bit-manipulation",
+    "cf": "bitmasks"
+  },
+  "matrix": {
+    "name": "矩陣",
+    "slug": "matrix",
+    "cf": ""
+  },
+  "prefix-sum": {
+    "name": "前綴和",
+    "slug": "prefix-sum",
+    "cf": ""
+  },
+  "tree": {
+    "name": "樹",
+    "slug": "tree",
+    "cf": "trees"
+  },
+  "two-pointers": {
+    "name": "雙指標",
+    "slug": "two-pointers",
+    "cf": "two pointers"
+  },
+  "breadth-first-search": {
+    "name": "廣度優先搜尋",
+    "slug": "breadth-first-search",
+    "cf": ""
+  },
+  "heap-priority-queue": {
+    "name": "優先佇列",
+    "slug": "heap-priority-queue",
+    "cf": ""
+  },
+  "simulation": {
+    "name": "模擬",
+    "slug": "simulation",
+    "cf": "implementation"
+  },
+  "counting": {
+    "name": "計數",
+    "slug": "counting",
+    "cf": ""
+  },
+  "graph": {
+    "name": "圖論",
+    "slug": "graph",
+    "cf": "graphs"
+  },
+  "stack": {
+    "name": "堆疊",
+    "slug": "stack",
+    "cf": ""
+  },
+  "binary-tree": {
+    "name": "二元樹",
+    "slug": "binary-tree",
+    "cf": ""
+  },
+  "sliding-window": {
+    "name": "滑動視窗",
+    "slug": "sliding-window",
+    "cf": "two pointers"
+  },
+  "enumeration": {
+    "name": "枚舉",
+    "slug": "enumeration",
+    "cf": "brute force"
+  },
+  "design": {
+    "name": "設計",
+    "slug": "design",
+    "cf": ""
+  },
+  "backtracking": {
+    "name": "回溯",
+    "slug": "backtracking",
+    "cf": ""
+  },
+  "number-theory": {
+    "name": "數論",
+    "slug": "number-theory",
+    "cf": "number theory"
+  },
+  "union-find": {
+    "name": "並查集",
+    "slug": "union-find",
+    "cf": "dsu"
+  },
+  "segment-tree": {
+    "name": "線段樹",
+    "slug": "segment-tree",
+    "cf": ""
+  },
+  "linked-list": {
+    "name": "鏈結串列",
+    "slug": "linked-list",
+    "cf": ""
+  },
+  "ordered-set": {
+    "name": "有序集合",
+    "slug": "ordered-set",
+    "cf": ""
+  },
+  "monotonic-stack": {
+    "name": "單調堆疊",
+    "slug": "monotonic-stack",
+    "cf": ""
+  },
+  "divide-and-conquer": {
+    "name": "分治",
+    "slug": "divide-and-conquer",
+    "cf": "divide and conquer"
+  },
+  "combinatorics": {
+    "name": "組合數學",
+    "slug": "combinatorics",
+    "cf": "combinatorics"
+  },
+  "trie": {
+    "name": "字典樹",
+    "slug": "trie",
+    "cf": ""
+  },
+  "queue": {
+    "name": "佇列",
+    "slug": "queue",
+    "cf": ""
+  },
+  "bitmask": {
+    "name": "位元遮罩",
+    "slug": "bitmask",
+    "cf": "bitmasks"
+  },
+  "binary-indexed-tree": {
+    "name": "樹狀陣列",
+    "slug": "binary-indexed-tree",
+    "cf": ""
+  },
+  "recursion": {
+    "name": "遞迴",
+    "slug": "recursion",
+    "cf": ""
+  },
+  "hash-function": {
+    "name": "雜湊函數",
+    "slug": "hash-function",
+    "cf": "hashing"
+  },
+  "geometry": {
+    "name": "幾何",
+    "slug": "geometry",
+    "cf": "geometry"
+  },
+  "memoization": {
+    "name": "記憶化",
+    "slug": "memoization",
+    "cf": ""
+  },
+  "shortest-path": {
+    "name": "最短路徑",
+    "slug": "shortest-path",
+    "cf": "shortest paths"
+  },
+  "binary-search-tree": {
+    "name": "二元搜尋樹",
+    "slug": "binary-search-tree",
+    "cf": ""
+  },
+  "topological-sort": {
+    "name": "拓撲排序",
+    "slug": "topological-sort",
+    "cf": ""
+  },
+  "string-matching": {
+    "name": "字串比對",
+    "slug": "string-matching",
+    "cf": "strings"
+  },
+  "rolling-hash": {
+    "name": "滾動雜湊",
+    "slug": "rolling-hash",
+    "cf": "hashing"
+  },
+  "game-theory": {
+    "name": "賽局理論",
+    "slug": "game-theory",
+    "cf": "games"
+  },
+  "monotonic-queue": {
+    "name": "單調佇列",
+    "slug": "monotonic-queue",
+    "cf": ""
+  },
+  "interactive": {
+    "name": "互動題",
+    "slug": "interactive",
+    "cf": "interactive"
+  },
+  "data-stream": {
+    "name": "資料串流",
+    "slug": "data-stream",
+    "cf": ""
+  },
+  "brainteaser": {
+    "name": "益智題",
+    "slug": "brainteaser",
+    "cf": ""
+  },
+  "merge-sort": {
+    "name": "合併排序",
+    "slug": "merge-sort",
+    "cf": ""
+  },
+  "minimax": {
+    "name": "極小化極大",
+    "slug": "minimax",
+    "cf": ""
+  },
+  "doubly-linked-list": {
+    "name": "雙向鏈結串列",
+    "slug": "doubly-linked-list",
+    "cf": ""
+  },
+  "randomized": {
+    "name": "隨機化",
+    "slug": "randomized",
+    "cf": ""
+  },
+  "counting-sort": {
+    "name": "計數排序",
+    "slug": "counting-sort",
+    "cf": ""
+  },
+  "iterator": {
+    "name": "迭代器",
+    "slug": "iterator",
+    "cf": ""
+  },
+  "concurrency": {
+    "name": "並行",
+    "slug": "concurrency",
+    "cf": ""
+  },
+  "suffix-array": {
+    "name": "後綴陣列",
+    "slug": "suffix-array",
+    "cf": ""
+  },
+  "quickselect": {
+    "name": "快速選擇",
+    "slug": "quickselect",
+    "cf": ""
+  },
+  "sweep-line": {
+    "name": "掃描線",
+    "slug": "sweep-line",
+    "cf": ""
+  },
+  "probability-and-statistics": {
+    "name": "機率與統計",
+    "slug": "probability-and-statistics",
+    "cf": "probabilities"
+  },
+  "minimum-spanning-tree": {
+    "name": "最小生成樹",
+    "slug": "minimum-spanning-tree",
+    "cf": ""
+  },
+  "bucket-sort": {
+    "name": "桶排序",
+    "slug": "bucket-sort",
+    "cf": ""
+  },
+  "shell": {
+    "name": "Shell",
+    "slug": "shell",
+    "cf": ""
+  },
+  "meet-in-the-middle": {
+    "name": "折半枚舉",
+    "slug": "meet-in-the-middle",
+    "cf": "meet-in-the-middle"
+  },
+  "reservoir-sampling": {
+    "name": "水塘抽樣",
+    "slug": "reservoir-sampling",
+    "cf": ""
+  },
+  "eulerian-circuit": {
+    "name": "歐拉迴路",
+    "slug": "eulerian-circuit",
+    "cf": ""
+  },
+  "radix-sort": {
+    "name": "基數排序",
+    "slug": "radix-sort",
+    "cf": ""
+  },
+  "strongly-connected-component": {
+    "name": "強連通分量",
+    "slug": "strongly-connected-component",
+    "cf": ""
+  },
+  "rejection-sampling": {
+    "name": "拒絕抽樣",
+    "slug": "rejection-sampling",
+    "cf": ""
+  },
+  "biconnected-component": {
+    "name": "雙連通分量",
+    "slug": "biconnected-component",
+    "cf": ""
+  },
+  "heap": {
+    "name": "堆積",
+    "slug": "heap",
+    "cf": ""
+  }
+}
