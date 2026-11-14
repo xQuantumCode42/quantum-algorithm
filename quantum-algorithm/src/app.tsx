@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import ReactMarkdown from "react-markdown";
 import { CppEditor, Graph, type GraphFormat, type TestCase } from "./practice";
+import { TemplateLibrary } from "./template-library";
 import "./style.css";
 
 type Page = "practice" | "notes" | "settings";
@@ -393,9 +394,9 @@ function App() {
         </form>}
       </>}
     </section>
-    <div className="practice-grid">
-      <section className="panel shortlist">
-        <h2>推薦題目</h2><p className="reason">{selection.reason}</p>
+    <div className="practice-stack">
+      <details className="panel shortlist">
+        <summary>推薦題目{selection.items.length > 0 && `（${selection.items.length}）`}</summary><p className="reason">{selection.reason}</p>
         {selection.items.map(p => <button key={p.id} type="button" className="candidate" aria-pressed={p.id === problem?.id}
           disabled={!!busy} onClick={async () => { if (p.id !== problem?.id && await confirmSwitch()) choose(p, practiceLanguage, practiceTopic); }}>
           <span>{p.title}</span><small>{platform[p.platform]} · {p.rating ?? stars(p.level)} · {data.focuses[p.focus]}</small>
@@ -408,7 +409,7 @@ function App() {
             notify("已更新 Codeforces 題庫：" + count + " 道可推薦題。請再點一次「推薦下一題」。");
           })}>更新 Codeforces 題庫</button>}
         </div>
-      </section>
+      </details>
       {problem && <section className="panel workspace">
         <div className="row title-row"><div><h2>{problem.title}</h2>
           <p className="muted">{practiceLanguage} · {data.topics[practiceTopic].name} · {data.focuses[problem.focus]}</p></div>
@@ -597,6 +598,7 @@ function App() {
           if (id === "notes") await refresh().catch(error);
           setPage(id);
         }}><span aria-hidden="true">{icon}</span>{name}</button>)}</nav>
+      <TemplateLibrary/>
     </aside>
     <main><div className="status" aria-live="polite">{(busy?.location === "page" && busy.label) || (status && <span className={status.error ? "error" : "success"}>{status.text}</span>)}</div>
       {content}</main>

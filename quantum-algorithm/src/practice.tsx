@@ -116,17 +116,31 @@ export function CppEditor({ code, change, cases }: { code: string; change: (code
     }, 650);
     return () => { current = false; window.clearTimeout(timer); };
   }, [code, running]);
-  return <>
-    <label className="field">C++ 編輯器<div className="cpp-editor">
+  const [full, setFull] = useState(false);
+  const editor = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!full) return;
+    editor.current?.focus();
+    function escape(event: KeyboardEvent) {
+      if (event.key === "Escape") setFull(false);
+    }
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, [full]);
+  return <section className={full ? "editor-full" : "editor-region"}>
+    <div className="row title-row"><h3>C++ 編輯器</h3>
+      <button type="button" onClick={() => setFull(value => !value)}>{full ? "離開全螢幕" : "全螢幕"}</button>
+    </div>
+    <div className="cpp-editor">
       <pre ref={preview} aria-hidden="true">{highlighted(code)}{"\n"}</pre>
-      <textarea value={code} maxLength={18000} spellCheck={false} wrap="off"
+      <textarea ref={editor} aria-label="C++ 程式碼" value={code} maxLength={18000} spellCheck={false} wrap="off"
         onChange={e => { change(e.target.value); setReport(undefined); setRunError(""); }}
         onScroll={e => {
           if (!preview.current) return;
           preview.current.scrollTop = e.currentTarget.scrollTop;
           preview.current.scrollLeft = e.currentTarget.scrollLeft;
         }}/>
-    </div></label>
+    </div>
     <button type="button" disabled={running || !code.trim()} onClick={async () => {
       setRunning(true);
       setReport(undefined);
@@ -139,5 +153,5 @@ export function CppEditor({ code, change, cases }: { code: string; change: (code
     {report && <p role="status">{report.ok ? "編譯成功" : "編譯失敗"}</p>}
     {report?.results.map((test, i) => <details key={i} open><summary>測資 {i + 1} · {test.status}</summary>
       <pre className="code-block">{test.output}{test.stderr && "\n" + test.stderr}</pre></details>)}
-  </>;
+  </section>;
 }
