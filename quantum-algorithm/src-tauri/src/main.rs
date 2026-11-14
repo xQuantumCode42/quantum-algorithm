@@ -59,6 +59,7 @@ struct App {
     settings: Mutex<Settings>,
     chatgpt: tokio::sync::Mutex<Option<chatgpt::Session>>,
     remote: Mutex<Vec<Problem>>,
+    added: Mutex<Vec<Problem>>,
     catalog: Catalog,
     http: reqwest::Client,
 }
@@ -70,6 +71,7 @@ impl App {
     fn problem(&self, id: &str) -> Result<Problem> {
         self.catalog.problems.iter().find(|p| p.id == id).cloned()
             .or_else(|| self.remote.lock().unwrap().iter().find(|p| p.id == id).cloned())
+            .or_else(|| self.added.lock().unwrap().iter().find(|p| p.id == id).cloned())
             .ok_or_else(|| "請先選擇一道題。".into())
     }
 
@@ -144,6 +146,7 @@ async fn app_state(app: State<'_, App>) -> Result<Value> {
     let mut problems = app.catalog.problems.clone();
     let noted: HashSet<_> = notes.iter().map(|(_, n)| n.problem.as_str()).collect();
     problems.extend(remote.iter().filter(|p| noted.contains(p.id.as_str())).cloned());
+    problems.extend(app.added.lock().unwrap().iter().filter(|p| noted.contains(p.id.as_str())).cloned());
     Ok(json!({
         "topics": app.catalog.topics, "focuses": app.catalog.focuses,
         "results": RESULTS, "languages": LANGUAGES, "problems": problems,
@@ -184,6 +187,74 @@ async fn external(request: reqwest::RequestBuilder) -> Result<Value> {
         return Err(format!("外部服務回傳 HTTP {}。", response.status().as_u16()));
     }
     response.json().await.map_err(|_| "外部服務回傳了無法辨識的資料。".into())
+}
+
+#[tauri::command]
+fn search_problems(app: State<App>, query: String) -> Vec<Problem> {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() || query.len() > 500 { return Vec::new(); }
+    let url_id = problem_link(&query).map(|(id, _, _)| id.to_lowercase());
+    let remote = app.remote.lock().unwrap();
+    let added = app.added.lock().unwrap();
+    let mut seen = HashSet::new();
+    let mut matches = Vec::new();
+    for p in app.catalog.problems.iter().chain(remote.iter()).chain(added.iter()) {
+        let id = p.id.to_lowercase();
+        let title = p.title.to_lowercase();
+        let short_id = id.split_once(':').map_or(id.as_str(), |(_, short)| short);
+        let score = if url_id.as_ref() == Some(&id) || query == id || query == short_id
+            || (p.platform == "cf" && query == short_id.replace('/', "")) || query == title { 0 }
+            else if title.starts_with(&query) { 1 }
+            else if title.contains(&query) || short_id.starts_with(&query) { 2 }
+            else { continue; };
+        if seen.insert(&p.id) { matches.push((score, p)); }
+    }
+    matches.sort_by_key(|(score, p)| (*score, p.title.as_str()));
+    matches.into_iter().take(12).map(|(_, p)| p.clone()).collect()
+}
+
+fn problem_link(input: &str) -> Option<(String, &'static str, String)> {
+    let url = reqwest::Url::parse(input.trim()).ok()?;
+    if !matches!(url.scheme(), "https" | "http") { return None; }
+    let parts: Vec<_> = url.path_segments()?.filter(|part| !part.is_empty()).collect();
+    let host = url.host_str()?;
+    if matches!(host, "leetcode.com" | "www.leetcode.com" | "leetcode.cn" | "www.leetcode.cn") {
+        let ["problems", slug, ..] = parts.as_slice() else { return None; };
+        if slug.is_empty() || !slug.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') { return None; }
+        return Some((format!("lc:{slug}"), "lc", format!("https://{host}/problems/{slug}/")));
+    }
+    if !matches!(host, "codeforces.com" | "www.codeforces.com") { return None; }
+    let (contest, index) = match parts.as_slice() {
+        ["problemset", "problem", contest, index] | ["contest", contest, "problem", index] => (contest, index),
+        _ => return None,
+    };
+    let contest = contest.parse::<u64>().ok()?;
+    if !index.bytes().all(|b| b.is_ascii_alphanumeric()) { return None; }
+    let index = index.to_ascii_uppercase();
+    Some((format!("cf:{contest}/{index}"), "cf", format!("https://codeforces.com/problemset/problem/{contest}/{index}/")))
+}
+
+#[tauri::command]
+fn add_linked_problem(app: State<App>, data: Value) -> Result<Problem> {
+    let link = text(&data, "link", 500)?;
+    let (id, platform, url) = problem_link(&link).ok_or("請貼上有效的 LeetCode 或 Codeforces 題目網址。")?;
+    if id.len() > 150 { return fail("題目網址過長。"); }
+    if let Ok(problem) = app.problem(&id) { return Ok(problem); }
+    let title = text(&data, "title", 200)?;
+    let topic = text(&data, "topic", 80)?;
+    if title.is_empty() || title.chars().any(char::is_control) || !app.catalog.topics.contains_key(&topic) {
+        return fail("請填寫題目名稱並選擇主題。");
+    }
+    let mut added = app.added.lock().unwrap();
+    if let Some(problem) = added.iter().find(|p| p.id == id) { return Ok(problem.clone()); }
+    let problem = Problem { id, platform: platform.into(), title, topic, level: 1,
+        focus: "implementation".into(), hint: String::new(), url, tags: Vec::new(), rating: None };
+    let mut updated = added.clone();
+    updated.push(problem.clone());
+    let contents = serde_json::to_string(&updated).map_err(|e| e.to_string())?;
+    write_atomic(&app.dir.join("added-problems.json"), &contents)?;
+    *added = updated;
+    Ok(problem)
 }
 
 #[tauri::command]
@@ -448,16 +519,22 @@ fn main() {
             let mut catalog: Catalog = serde_json::from_str(include_str!("../catalog.json"))?;
             catalog.topics = serde_json::from_str(include_str!("../topics.json"))?;
             let remote = judges::load_cache(&dir, &catalog.topics);
+            let added = match fs::read(dir.join("added-problems.json")) {
+                Ok(data) => serde_json::from_slice(&data)?,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+                Err(error) => return Err(error.into()),
+            };
             window.manage(App {
                 dir, settings: Mutex::new(settings),
                 chatgpt: tokio::sync::Mutex::new(None),
                 remote: Mutex::new(remote),
+                added: Mutex::new(added),
                 catalog,
                 http: reqwest::Client::builder().timeout(std::time::Duration::from_secs(40)).build()?,
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![app_state, save_settings, recommend, coach, save_note, delete_note, sync_codeforces, open_problem, open_notes,
+        .invoke_handler(tauri::generate_handler![app_state, save_settings, search_problems, add_linked_problem, recommend, coach, save_note, delete_note, sync_codeforces, open_problem, open_notes,
             judges::open_judge, judges::refresh_codeforces_catalog,
             chatgpt::chatgpt_sign_in, chatgpt::chatgpt_sign_out, chatgpt::chatgpt_model])
         .run(tauri::generate_context!())
@@ -467,6 +544,16 @@ fn main() {
 #[cfg(test)]
 mod note_tests {
     use super::*;
+
+    #[test]
+    fn problem_links_resolve_to_catalog_ids() {
+        let (id, _, url) = problem_link("https://codeforces.com/contest/474/problem/b?from=practice").unwrap();
+        assert_eq!(id, "cf:474/B");
+        assert_eq!(url, "https://codeforces.com/problemset/problem/474/B/");
+        assert_eq!(problem_link("https://leetcode.com/problems/two-sum/description/").unwrap().0, "lc:two-sum");
+        assert!(problem_link("https://leetcode.com.example.org/problems/two-sum/").is_none());
+        assert!(problem_link("https://codeforces.com/contest/474").is_none());
+    }
 
     #[test]
     fn deletion_moves_only_app_notes_and_keeps_the_file_recoverable() {

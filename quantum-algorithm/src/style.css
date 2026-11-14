@@ -96,3 +96,7 @@ details button { margin-top: 8px; }
 .modal-backdrop { position: fixed; inset: 0; background: #080c11c9; display: grid; place-items: center; padding: 16px; }
 .plan-dialog { width: min(100%, 435px); box-shadow: 0 16px 45px #0008; }
 .plan-dialog p { margin: 9px 0 16px; }
+
+.problem-search { margin-bottom: 16px; }
+.problem-search-fields { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.problem-search-fields > .field:first-child { flex: 1 1 240px; }

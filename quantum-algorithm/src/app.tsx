@@ -80,6 +80,10 @@ function App() {
   const [cf, setCf] = useState("");
   const [notesPath, setNotesPath] = useState("");
   const [find, setFind] = useState("");
+  const [problemQuery, setProblemQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Problem[]>();
+  const [linkedTitle, setLinkedTitle] = useState("");
+  const [linkedTopic, setLinkedTopic] = useState("array");
 
   const notify = (text: string) => setStatus({ text, error: false });
   const error = (reason: unknown) => setStatus({ text: String(reason), error: true });
@@ -131,6 +135,15 @@ function App() {
     return !(exchanges.length || observation.trim() || code.trim() || question.trim() || statement.trim())
       || window.confirm("換題會清除目前對話與未儲存的內容。確定換題？");
   }
+  function startProblemNote(next: Problem) {
+    setSelection(empty);
+    choose(next, language, next.topic);
+    setShowNote(true);
+    setProblemQuery("");
+    setSearchResults(undefined);
+    setLinkedTitle("");
+  }
+
   function changeJudge(next: string) {
     if (!confirmSwitch()) return;
     setJudge(next);
@@ -205,6 +218,47 @@ function App() {
       <button className="primary" disabled={!!busy}>推薦下一題</button>
       {data.ai.connected && <label className="check"><input type="checkbox" checked={aiPick} onChange={e => setAiPick(e.target.checked)}/> 讓 AI 參考近期筆記選題</label>}
     </form>
+    <section className="panel problem-search">
+      <form className="problem-search-fields" onSubmit={e => {
+        e.preventDefault();
+        void run("正在搜尋題目…", async () => {
+          setSearchResults(await command<Problem[]>("search_problems", { query: problemQuery }));
+        });
+      }}>
+        <label className="field">搜尋題目<input type="search" value={problemQuery} maxLength={500}
+          placeholder="題目名稱、網址或 Codeforces 題號（如 474B）" disabled={!!busy}
+          onChange={e => { setProblemQuery(e.target.value); setSearchResults(undefined); }}/></label>
+        <button disabled={!!busy || !problemQuery.trim()}>搜尋</button>
+      </form>
+      {searchResults?.map(p => <button key={p.id} type="button" className="candidate" disabled={!!busy}
+        onClick={() => {
+          if (p.id === problem?.id) setShowNote(true);
+          else if (confirmSwitch()) startProblemNote(p);
+        }}>
+        <span>{p.title}</span><small>{platform[p.platform]} · 記下這次練習</small>
+      </button>)}
+      {searchResults?.length === 0 && <>
+        <p className="muted">{/^https?:\/\//i.test(problemQuery)
+          ? "題庫沒有這道題。填寫題名和主題即可新增筆記。"
+          : "沒有符合的題目。可以貼上 LeetCode 或 Codeforces 的原題網址。"}</p>
+        {/^https?:\/\//i.test(problemQuery) && <form className="problem-search-fields" onSubmit={e => {
+          e.preventDefault();
+          if (!confirmSwitch()) return;
+          void run("正在加入題目…", async () => {
+            const next = await payload<Problem>("add_linked_problem", {
+              link: problemQuery, title: linkedTitle, topic: linkedTopic,
+            });
+            startProblemNote(next);
+          });
+        }}>
+          <label className="field">題目名稱<input value={linkedTitle} maxLength={200}
+            onChange={e => setLinkedTitle(e.target.value)}/></label>
+          <Select label="主題" options={Object.entries(data.topics).map(([id, tag]) => [id, tag.name])}
+            value={linkedTopic} change={setLinkedTopic}/>
+          <button disabled={!!busy || !linkedTitle.trim()}>加入並寫筆記</button>
+        </form>}
+      </>}
+    </section>
     <div className="practice-grid">
       <section className="panel shortlist">
         <h2>推薦題目</h2><p className="reason">{selection.reason}</p>
