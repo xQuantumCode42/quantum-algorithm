@@ -149,7 +149,8 @@ fn pre_text(html: &str) -> String {
         let Some((tag, next)) = after.split_once('>') else {
             break;
         };
-        if tag.trim_end_matches('/').trim() == "br" || tag == "/div" {
+        if tag.trim_end_matches('/').trim() == "br" || matches!(tag, "/div" | "/p" | "/li" | "/pre")
+        {
             text.push('\n');
         }
         rest = next;
@@ -216,11 +217,9 @@ fn sample_cases(html: &str, codeforces: bool) -> Vec<Value> {
         .collect()
 }
 
-#[tauri::command]
-pub async fn import_samples(app: State<'_, App>, id: String) -> Result<Vec<Value>> {
-    let problem = app.problem(&id)?;
+async fn problem_page(link: &str) -> Result<String> {
     // Only the problem links recognized by the catalog are requested.
-    let (_, _, url) = crate::problem_link(&problem.url).ok_or("不支援的題目網址。")?;
+    let (_, _, url) = crate::problem_link(link).ok_or("不支援的題目網址。")?;
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(8))
@@ -241,6 +240,55 @@ pub async fn import_samples(app: State<'_, App>, id: String) -> Result<Vec<Value
         }
         bytes.extend_from_slice(&chunk);
     }
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+pub async fn problem_statement(problem: &crate::Problem) -> Option<String> {
+    let (id, platform, url) = crate::problem_link(&problem.url)?;
+    let raw = if platform == "lc" {
+        let host = reqwest::Url::parse(&url).ok()?.host_str()?.to_owned();
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(8))
+            .build()
+            .ok()?;
+        let response = client.post(format!("https://{host}/graphql/")).json(&json!({
+            "query": "query Statement($slug: String!) { question(titleSlug: $slug) { content } }",
+            "variables": {"slug": id.strip_prefix("lc:")?}
+        })).send().await.ok()?.error_for_status().ok()?;
+        if response.content_length().is_some_and(|n| n > 1_000_000) {
+            return None;
+        }
+        let mut response = response;
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.ok()? {
+            if bytes.len() + chunk.len() > 1_000_000 {
+                return None;
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        let body: Value = serde_json::from_slice(&bytes).ok()?;
+        body["data"]["question"]["content"].as_str()?.to_owned()
+    } else {
+        let page = problem_page(&url).await.ok()?;
+        let (_, statement) = page.split_once("class=\"problem-statement\"")?;
+        let (_, statement) = statement.split_once('>')?;
+        statement
+            .split("class=\"sample-test\"")
+            .next()?
+            .split("</form>")
+            .next()?
+            .to_owned()
+    };
+    let statement = pre_text(&raw).chars().take(16000).collect::<String>();
+    (!statement.trim().is_empty()).then_some(statement)
+}
+
+#[tauri::command]
+pub async fn import_samples(app: State<'_, App>, id: String) -> Result<Vec<Value>> {
+    let problem = app.problem(&id)?;
+    let page = problem_page(&problem.url).await?;
+    let bytes = page.as_bytes();
     let html = String::from_utf8_lossy(&bytes);
     let mut cases = sample_cases(&html, problem.platform == "cf");
     if cases.is_empty() && problem.platform == "lc" {

@@ -303,7 +303,9 @@ function App() {
     const waiting = task === "chat" ? "正在思考…" : task === "draft" ? "正在整理筆記…" : "教練正在回覆…";
     void run(waiting, async () => {
       const response = await payload<{ reply: string; source: string }>("coach", {
-        problem: problem.id, language: practiceLanguage, mode, task, statement, code, question,
+        problem: problem.id, language: practiceLanguage, mode, task, statement, code, question, examples: cases.slice(0, 3).map(test => ({
+          input: test.input.slice(0, 1200), expected: test.expected?.slice(0, 1200) ?? null,
+        })),
         history: exchanges.slice(-3).flatMap(exchange => [
           { role: "user", text: exchange.question.slice(0, 6000) },
           { role: "assistant", text: exchange.reply.slice(0, 6000) },
@@ -469,7 +471,7 @@ function App() {
         </section>
         <form className="section" onSubmit={e => { e.preventDefault(); coach("chat"); }}>
           {data.ai.connected && <small>使用 ChatGPT 訂閱用量</small>}
-          <label className="field">你卡在哪一步？<textarea placeholder="例如：我的搜尋區間什麼時候應該停止？" rows={2}
+          <label className="field">問AI問題<textarea placeholder="例如：我的搜尋區間什麼時候應該停止？" rows={2}
             value={question} maxLength={6000} onChange={e => setQuestion(e.target.value)}/></label>
           <div className="row action-row">
             <button className="primary" disabled={!!busy || !question.trim()}>送出問題</button>
