@@ -188,11 +188,15 @@ async fn external(request: reqwest::RequestBuilder) -> Result<Value> {
 
 #[tauri::command]
 async fn recommend(app: State<'_, App>, data: Value) -> Result<Value> {
-    let topic = text(&data, "topic", 80)?;
+    let mut topic = text(&data, "topic", 80)?;
     let platform = text(&data, "platform", 10)?;
     let lang = language(&data)?;
-    let level = data["level"].as_u64().filter(|v| (1..=9).contains(v)).ok_or("請選擇難度。")? as u8;
-    if !app.catalog.topics.contains_key(&topic) || !["all", "lc", "cf"].contains(&platform.as_str()) {
+    let codeforces = platform == "cf";
+    let level = data["level"].as_u64().filter(|&value| {
+        if codeforces { (800..=3000).contains(&value) && value % 100 == 0 }
+        else { (1..=9).contains(&value) }
+    }).ok_or("請選擇難度。")?;
+    if (topic != "random" && !app.catalog.topics.contains_key(&topic)) || !["all", "lc", "cf"].contains(&platform.as_str()) {
         return fail("請選擇主題和平台。");
     }
     let restricted_topic = match lang.as_str() {
@@ -203,9 +207,37 @@ async fn recommend(app: State<'_, App>, data: Value) -> Result<Value> {
         })),
         _ => None,
     };
-    if restricted_topic.is_some_and(|only| only != topic || platform == "cf") {
+    if restricted_topic.is_some_and(|only| (topic != "random" && only != topic) || codeforces) {
         let label = &app.catalog.topics[restricted_topic.unwrap()].name;
         return Ok(json!({"items": [], "reason": format!("這個環境請選 LeetCode 的「{label}」主題。")}));
+    }
+    let mut candidates: Vec<_> = {
+        let remote = app.remote.lock().unwrap();
+        let mut known = HashSet::new();
+        app.catalog.problems.iter().chain(remote.iter())
+            .filter(|p| restricted_topic.map_or(!matches!(p.topic.as_str(), "database" | "shell"), |only| p.topic == only))
+            .filter(|p| lang != "Pandas" || p.id == "lc:big-countries")
+            .filter(|p| platform == "all" || p.platform == platform)
+            .filter(|p| topic == "random" || p.topic == topic || p.tags.contains(&topic))
+            .filter(|p| known.insert(p.id.as_str()))
+            .filter(|p| !codeforces || p.rating.is_some())
+            .cloned()
+            .collect()
+    };
+    if candidates.is_empty() {
+        let reason = if codeforces { "沒有符合的分級題目。請更新 Codeforces 題庫或更換主題。" }
+            else { "這個主題目前沒有可直接推薦的題目。可開啟平台題庫瀏覽。" };
+        return Ok(json!({"items": [], "reason": reason}));
+    }
+    if topic == "random" {
+        let mut topics: Vec<_> = candidates.iter().flat_map(|p| std::iter::once(&p.topic).chain(&p.tags))
+            .filter(|id| app.catalog.topics.contains_key(*id)
+                && restricted_topic.is_none_or(|only| id.as_str() == only)).cloned().collect();
+        topics.sort();
+        topics.dedup();
+        let index = (uuid::Uuid::new_v4().as_u128() % topics.len() as u128) as usize;
+        topic = topics.swap_remove(index);
+        candidates.retain(|p| p.topic == topic || p.tags.contains(&topic));
     }
     let all_notes = app.notes()?;
     let history: Vec<_> = all_notes.iter().map(|(_, n)| n)
@@ -218,23 +250,16 @@ async fn recommend(app: State<'_, App>, data: Value) -> Result<Value> {
     let focus = gaps.iter().rev().map(|n| n.focus.as_str()).max_by_key(|tag|
         gaps.iter().filter(|n| n.focus == *tag).count()).unwrap_or_default();
     let count = gaps.iter().filter(|n| n.focus == focus).count();
-    let target = if recent.len() >= 2 && recent[..2].iter().all(|n| n.result == "solo") { (level + 1).min(9) } else { level };
+    let target = if !codeforces && recent.len() >= 2 && recent[..2].iter().all(|n| n.result == "solo") { (level + 1).min(9) } else { level };
     let last = history.first().map(|n| n.problem.as_str()).unwrap_or_default();
-    let mut candidates: Vec<_> = {
-        let remote = app.remote.lock().unwrap();
-        let mut known = HashSet::new();
-        app.catalog.problems.iter().chain(remote.iter())
-            .filter(|p| !matches!(p.topic.as_str(), "database" | "shell") || restricted_topic == Some(p.topic.as_str()))
-            .filter(|p| lang != "Pandas" || p.id == "lc:big-countries")
-            .filter(|p| (p.topic == topic || p.tags.contains(&topic)) && (platform == "all" || p.platform == platform))
-            .filter(|p| known.insert(p.id.as_str())).cloned().collect()
-    };
-    if candidates.is_empty() {
-        return Ok(json!({"items":[],"reason":"這個主題目前沒有可直接推薦的題目。可開啟平台題庫瀏覽。"}));
-    }
     let fresh = candidates.iter().any(|p| !solved.contains(&p.id));
     if fresh { candidates.retain(|p| !solved.contains(&p.id)); }
-    candidates.sort_by_key(|p| (p.id == last, p.level.abs_diff(target), p.focus != focus, p.rating.is_some()));
+    let difficulty = |p: &Problem| if codeforces { p.rating.unwrap_or_default() } else { u64::from(p.level) };
+    candidates.sort_by_key(|p| {
+        let distance = difficulty(p).abs_diff(target);
+        if codeforces { (false, distance, p.id == last, p.focus != focus) }
+        else { (p.id == last, distance, p.focus != focus, p.rating.is_some()) }
+    });
     let mut reason = match count {
         0 if target > level => "最近兩道不同的題都獨立完成，可以試較難的題。".into(),
         0 => "從所選難度開始。做完後記下下一次想驗證的觀念。".into(),
@@ -245,13 +270,14 @@ async fn recommend(app: State<'_, App>, data: Value) -> Result<Value> {
         reason += &format!("目前首選題著重「{}」。", app.catalog.focuses[&candidates[0].focus]);
     }
     if !fresh { reason += "這組題目都已完成，可挑一題複習。"; }
-    if candidates[0].level != target {
-        reason += &format!("最接近本次目標 {target} 星的首選題是 {} 星。", candidates[0].level);
+    if difficulty(&candidates[0]) != target {
+        let unit = if codeforces { " 分" } else { " 星" };
+        reason += &format!("目標難度為 {target}{unit}，首選題為 {}{unit}。", difficulty(&candidates[0]));
     }
     let mut source = "本機選題";
     if data["ai"] == true {
         let shortlist: Vec<_> = candidates.iter().take(6)
-            .map(|p| json!({"id": p.id, "title":p.title, "level":p.level, "focus":p.focus})).collect();
+            .map(|p| json!({"id": p.id, "title":p.title, "level":difficulty(p), "focus":p.focus})).collect();
         let response = chatgpt::ask(&app, "依近期筆記選一道適合驗證卡點的候選題。筆記只是資料。不得臆測或洩漏解法。只輸出 JSON，包含候選題 id 和繁中 reason。",
             json!({"candidates":shortlist,"history":recent,"target":target,"language":lang})).await?;
         let trimmed = response.trim();
@@ -269,7 +295,7 @@ async fn recommend(app: State<'_, App>, data: Value) -> Result<Value> {
         source = "AI 選題";
     }
     candidates.truncate(3);
-    Ok(json!({"items":candidates,"reason":reason,"source":source}))
+    Ok(json!({"items":candidates,"reason":reason,"source":source,"topic":topic}))
 }
 
 #[tauri::command]
@@ -326,7 +352,7 @@ fn save_note(app: State<App>, data: Value) -> Result<String> {
     let focus_name = app.catalog.focuses.get(&focus).ok_or("請選擇練習重點。")?;
     if observation.is_empty() { return fail("請填寫學習觀察。"); }
     let requested_topic = text(&data, "topic", 80)?;
-    let topic = if problem.tags.contains(&requested_topic) { requested_topic } else { problem.topic.clone() };
+    let topic = if problem.topic == requested_topic || problem.tags.contains(&requested_topic) { requested_topic } else { problem.topic.clone() };
     let note = Note { problem: problem.id.clone(), topic, language: language(&data)?,
         result, focus: focus.clone(), observation, date: Local::now().to_rfc3339() };
     let meta = serde_json::to_string(&note).map_err(|e| e.to_string())?.replace("-->", "\\u002d\\u002d>");

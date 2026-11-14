@@ -15,22 +15,26 @@ type AppState = {
   lc: string; cf: string; synced: number; cf_catalog: number;
   ai: { connected: boolean; registered: boolean; email: string; selected: string; models: { slug: string; name: string }[] };
 };
-type Selection = { items: Problem[]; reason: string; source?: string };
+type Selection = { items: Problem[]; reason: string; topic?: string; source?: string };
 type Exchange = { question: string; reply: string; source: string };
 
 const platform = { lc: "LeetCode", cf: "Codeforces" };
 const command = <T,>(name: string, data?: Record<string, unknown>) => invoke<T>(name, data);
 const payload = <T,>(name: string, data: object) => command<T>(name, { data });
+const codeforcesDifficulties: [string, string][] = Array.from({ length: 23 }, (_, index) => {
+  const rating = String(800 + index * 100);
+  return [rating, rating];
+});
 const stars = (level: number) => level + " ★ · " + ["Easy", "Medium", "Hard"][Math.floor((level - 1) / 3)];
 const openJudge = (platform: string, action: string, topic = "") =>
   command<void>("open_judge", { platform, action, topic });
 const empty: Selection = { items: [], reason: "" };
 
-function Select({ label, options, value, change }: {
-  label: string; options: [string, string][]; value: string; change: (value: string) => void;
+function Select({ label, options, value, change, disabled }: {
+  label: string; options: [string, string][]; value: string; change: (value: string) => void; disabled?: boolean;
 }) {
   return <label className="field"><span>{label}</span>
-    <select value={value} onChange={e => change(e.target.value)}>
+    <select disabled={disabled} value={value} onChange={e => change(e.target.value)}>
       {options.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
     </select>
   </label>;
@@ -53,6 +57,7 @@ function App() {
   const [language, setLanguage] = useState("Python3");
   const [judge, setJudge] = useState("all");
   const [level, setLevel] = useState("2");
+  const [rating, setRating] = useState("800");
   const [practiceTopic, setPracticeTopic] = useState("binary");
   const [selection, setSelection] = useState(empty);
   const [problem, setProblem] = useState<Problem>();
@@ -97,13 +102,13 @@ function App() {
   useEffect(() => {
     async function init() {
       const state = await command<AppState>("app_state");
-      setData(state);
       setLc(state.lc);
       setCf(state.cf);
       setNotesPath(state.path);
       const picks = await payload<Selection>("recommend", { topic: "binary", platform: "all", language: "Python3", level: 2 });
       setSelection(picks);
       choose(picks.items[0], "Python3", "binary");
+      setData(state);
     }
     void init().catch(error);
   }, []);
@@ -126,14 +131,20 @@ function App() {
     return !(exchanges.length || observation.trim() || code.trim() || question.trim() || statement.trim())
       || window.confirm("換題會清除目前對話與未儲存的內容。確定換題？");
   }
+  function changeJudge(next: string) {
+    if (!confirmSwitch()) return;
+    setJudge(next);
+    setSelection(empty);
+    choose(undefined, language, topic);
+  }
   function recommend() {
     if (!confirmSwitch()) return;
     void run("正在選題…", async () => {
       const picks = await payload<Selection>("recommend", {
-        topic, platform: judge, language, level: Number(level), ai: !!data?.ai.connected && aiPick,
+        topic, platform: judge, language, level: Number(judge === "cf" ? rating : level), ai: !!data?.ai.connected && aiPick,
       });
       setSelection(picks);
-      choose(picks.items[0], language, topic);
+      choose(picks.items[0], language, picks.topic ?? topic);
     });
   }
   function coach(task: "chat" | "review" | "draft") {
@@ -186,9 +197,11 @@ function App() {
       <span className="badge">{data.ai.connected ? "ChatGPT 已連結" : "本機模式"}</span></header>
     <form className="filters panel" onSubmit={e => { e.preventDefault(); recommend(); }}>
       <Select label="程式語言" options={data.languages.map(l => [l, l])} value={language} change={setLanguage}/>
-      <Select label="主題" options={Object.entries(data.topics).map(([id, tag]) => [id, tag.name + " · " + tag.slug])} value={topic} change={setTopic}/>
-      <Select label="平台" options={[["all", "全部平台"], ...Object.entries(platform)]} value={judge} change={setJudge}/>
-      <Select label="起始難度" options={Array.from({ length: 9 }, (_, i) => [String(i + 1), stars(i + 1)])} value={level} change={setLevel}/>
+      <Select label="主題" options={[["random", "隨機主題"], ...Object.entries(data.topics).map(([id, tag]): [string, string] => [id, tag.name + " · " + tag.slug])]} value={topic} change={setTopic}/>
+      <Select label="平台" options={[["all", "全部平台"], ...Object.entries(platform)]} value={judge} change={changeJudge} disabled={!!busy}/>
+      {judge === "cf"
+        ? <Select label="Codeforces 難度" options={codeforcesDifficulties} value={rating} change={setRating}/>
+        : <Select label="起始難度" options={Array.from({ length: 9 }, (_, i) => [String(i + 1), stars(i + 1)])} value={level} change={setLevel}/>}
       <button className="primary" disabled={!!busy}>推薦下一題</button>
       {data.ai.connected && <label className="check"><input type="checkbox" checked={aiPick} onChange={e => setAiPick(e.target.checked)}/> 讓 AI 參考近期筆記選題</label>}
     </form>
@@ -197,10 +210,10 @@ function App() {
         <h2>推薦題目</h2><p className="reason">{selection.reason}</p>
         {selection.items.map(p => <button key={p.id} type="button" className="candidate" aria-pressed={p.id === problem?.id}
           disabled={!!busy} onClick={() => { if (p.id !== problem?.id && confirmSwitch()) choose(p, practiceLanguage, practiceTopic); }}>
-          <span>{p.title}</span><small>{platform[p.platform]} · {stars(p.level)}{p.rating && " (" + p.rating + ")"} · {data.focuses[p.focus]}</small>
+          <span>{p.title}</span><small>{platform[p.platform]} · {p.rating ?? stars(p.level)} · {data.focuses[p.focus]}</small>
         </button>)}
         <div className="row action-row">
-          {judge !== "cf" && <button type="button" onClick={() => void run("正在開啟題庫…", () => openJudge("lc", "catalog", topic))}>LeetCode 主題題庫 ↗</button>}
+          {judge !== "cf" && topic !== "random" && <button type="button" onClick={() => void run("正在開啟題庫…", () => openJudge("lc", "catalog", topic))}>LeetCode 主題題庫 ↗</button>}
           {judge !== "lc" && <button type="button" disabled={!!busy} onClick={() => void run("正在更新 Codeforces 題庫…", async () => {
             const count = await command<number>("refresh_codeforces_catalog");
             await refresh();

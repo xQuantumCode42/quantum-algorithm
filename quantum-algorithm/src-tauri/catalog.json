@@ -166,6 +166,7 @@
     {
       "id": "cf:474/B",
       "platform": "cf",
+      "rating": 1200,
       "title": "Worms",
       "topic": "binary",
       "level": 3,
@@ -180,6 +181,7 @@
     {
       "id": "cf:706/B",
       "platform": "cf",
+      "rating": 1100,
       "title": "Interesting Drink",
       "topic": "binary",
       "level": 3,
@@ -194,6 +196,7 @@
     {
       "id": "cf:670/D1",
       "platform": "cf",
+      "rating": 1400,
       "title": "Magic Powder - 1",
       "topic": "binary",
       "level": 5,
@@ -207,6 +210,7 @@
     {
       "id": "cf:4/C",
       "platform": "cf",
+      "rating": 1300,
       "title": "Registration System",
       "topic": "hash",
       "level": 3,
@@ -220,6 +224,7 @@
     {
       "id": "cf:236/A",
       "platform": "cf",
+      "rating": 800,
       "title": "Boy or Girl",
       "topic": "hash",
       "level": 1,
@@ -233,6 +238,7 @@
     {
       "id": "cf:455/A",
       "platform": "cf",
+      "rating": 1500,
       "title": "Boredom",
       "topic": "dp",
       "level": 5,
@@ -246,6 +252,7 @@
     {
       "id": "cf:189/A",
       "platform": "cf",
+      "rating": 1300,
       "title": "Cut Ribbon",
       "topic": "dp",
       "level": 4,
@@ -259,6 +266,7 @@
     {
       "id": "cf:160/A",
       "platform": "cf",
+      "rating": 900,
       "title": "Twins",
       "topic": "greedy",
       "level": 2,
@@ -273,6 +281,7 @@
     {
       "id": "cf:230/A",
       "platform": "cf",
+      "rating": 1000,
       "title": "Dragons",
       "topic": "greedy",
       "level": 3,
