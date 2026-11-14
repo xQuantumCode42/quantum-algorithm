@@ -61,6 +61,18 @@ function Markdown({ text }: { text: string }) {
   </div>;
 }
 
+type RememberedView = {
+  page: Page; topic: string; language: string; judge: string; level: string; rating: string;
+  problem: string; practiceLanguage: string; practiceTopic: string; file: string; viewNote: string;
+  showNote: boolean; shortlistOpen: boolean; aiPick: boolean;
+};
+const viewKey = "quantum-workspace-view-v1";
+
+function readView(): Partial<RememberedView> {
+  try { return JSON.parse(localStorage.getItem(viewKey) ?? "{}") ?? {}; }
+  catch { return {}; }
+}
+
 function App() {
   const [data, setData] = useState<AppState>();
   const [page, setPage] = useState<Page>("practice");
@@ -82,6 +94,7 @@ function App() {
   const [focus, setFocus] = useState("boundary");
   const [result, setResult] = useState("stuck");
   const [showNote, setShowNote] = useState(false);
+  const [shortlistOpen, setShortlistOpen] = useState(false);
   const [viewNote, setViewNote] = useState("");
   const [aiPick, setAiPick] = useState(true);
   const [planWelcome, setPlanWelcome] = useState(false);
@@ -215,9 +228,33 @@ function App() {
       setLc(state.lc);
       setCf(state.cf);
       setNotesPath(state.path);
-      const picks = await payload<Selection>("recommend", { topic: "binary", platform: "all", language: "Python3", level: 2 });
-      setSelection(picks);
-      choose(picks.items[0], "Python3", "binary");
+      const view = readView();
+      const restoredTopic = typeof view.topic === "string" && (view.topic === "random" || Object.prototype.hasOwnProperty.call(state.topics, view.topic)) ? view.topic : "binary";
+      const restoredLanguage = view.language && state.languages.includes(view.language) ? view.language : "Python3";
+      const restoredJudge = view.judge && ["all", "lc", "cf"].includes(view.judge) ? view.judge : "all";
+      const restoredLevel = /^[1-9]$/.test(view.level ?? "") ? view.level! : "2";
+      const restoredRating = codeforcesDifficulties.some(([key]) => key === view.rating) ? view.rating! : "800";
+      setTopic(restoredTopic);
+      setLanguage(restoredLanguage);
+      setJudge(restoredJudge);
+      setLevel(restoredLevel);
+      setRating(restoredRating);
+      setAiPick(view.aiPick !== false);
+      setShortlistOpen(view.shortlistOpen === true);
+      if (view.page === "notes" || view.page === "settings") setPage(view.page);
+      if (state.notes.some(([file]) => file === view.viewNote)) setViewNote(view.viewNote!);
+      if (view.problem) {
+        const next = state.problems.find(p => p.id === view.problem)
+          ?? await command<Problem>("reopen_problem", { id: view.problem }).catch(() => undefined);
+        activateProblem(next, view.practiceLanguage && state.languages.includes(view.practiceLanguage)
+          ? view.practiceLanguage : restoredLanguage, view.practiceTopic ?? restoredTopic, state.notes, view.file);
+        setShowNote(view.showNote === true);
+      } else if (!Object.prototype.hasOwnProperty.call(view, "problem")) {
+        const picks = await payload<Selection>("recommend", { topic: restoredTopic, platform: restoredJudge,
+          language: restoredLanguage, level: Number(restoredJudge === "cf" ? restoredRating : restoredLevel) });
+        setSelection(picks);
+        activateProblem(picks.items[0], restoredLanguage, picks.topic ?? restoredTopic, state.notes);
+      }
       setData(state);
     }
     void init().catch(error);
@@ -242,12 +279,23 @@ function App() {
     catch (reason) { error(reason); return false; }
   }
 
-  async function resumeNote(file: string, note: Note) {
-    const next = data?.problems.find(p => p.id === note.problem);
-    if (!next || !await confirmSwitch()) return;
-    if (file === noteFile.current) { setPage("practice"); setShowNote(true); return; }
-    choose(next, note.language, note.topic);
+  useEffect(() => {
+    if (!data) return;
+    const view: RememberedView = { page, topic, language, judge, level, rating, problem: problem?.id ?? "",
+      practiceLanguage, practiceTopic, file: noteFile.current, viewNote, showNote, shortlistOpen, aiPick };
+    try { localStorage.setItem(viewKey, JSON.stringify(view)); } catch { /* Preferences are optional. */ }
+  }, [data, page, topic, language, judge, level, rating, problem, practiceLanguage, practiceTopic, viewNote, showNote, shortlistOpen, aiPick]);
+
+  function activateProblem(next: Problem | undefined, lang: string, selectedTopic: string,
+    notes: AppState["notes"], preferredFile?: string) {
+    const existing = notes.find(([file, note]) => file === preferredFile && note.problem === next?.id)
+      ?? notes.find(([, note]) => note.problem === next?.id);
+    choose(next, lang, selectedTopic);
+    if (!existing) return;
+    const [file, note] = existing;
     noteFile.current = file;
+    setPracticeLanguage(note.language);
+    setPracticeTopic(note.topic);
     const saved = note.workspace;
     const restored: Workspace = {
       code: saved?.code ?? "", statement: saved?.statement ?? "", question: saved?.question ?? "",
@@ -267,14 +315,28 @@ function App() {
     setObservation(note.observation);
     setFocus(note.focus);
     setResult(note.result);
+  }
+
+  async function resumeNote(file: string, note: Note) {
+    const next = data?.problems.find(p => p.id === note.problem);
+    if (!next || !await confirmSwitch()) return;
+    if (file !== noteFile.current) activateProblem(next, note.language, note.topic, data?.notes ?? [], file);
+
     setSelection(empty);
     setPage("practice");
     setShowNote(true);
   }
 
-  function startProblemNote(next: Problem) {
+  async function openPracticeProblem(next: Problem | undefined, lang: string, selectedTopic: string) {
+    if (next && problem?.id === next.id) return;
+    const state = await command<AppState>("app_state");
+    activateProblem(next, lang, selectedTopic, state.notes);
+    setData(state);
+  }
+
+  async function startProblemNote(next: Problem) {
     setSelection(empty);
-    choose(next, language, next.topic);
+    await openPracticeProblem(next, language, next.topic);
     setShowNote(true);
     setProblemQuery("");
     setSearchResults(undefined);
@@ -294,7 +356,7 @@ function App() {
         topic, platform: judge, language, level: Number(judge === "cf" ? rating : level), ai: !!data?.ai.connected && aiPick,
       });
       setSelection(picks);
-      choose(picks.items[0], language, picks.topic ?? topic);
+      await openPracticeProblem(picks.items[0], language, picks.topic ?? topic);
     });
   }
   function coach(task: "chat" | "review" | "draft") {
@@ -370,7 +432,7 @@ function App() {
       {searchResults?.map(p => <button key={p.id} type="button" className="candidate" disabled={!!busy}
         onClick={async () => {
           if (p.id === problem?.id) setShowNote(true);
-          else if (await confirmSwitch()) startProblemNote(p);
+          else if (await confirmSwitch()) await startProblemNote(p).catch(error);
         }}>
         <span>{p.title}</span><small>{platform[p.platform]} · 記下這次練習</small>
       </button>)}
@@ -385,7 +447,7 @@ function App() {
             const next = await payload<Problem>("add_linked_problem", {
               link: problemQuery, title: linkedTitle, topic: linkedTopic,
             });
-            startProblemNote(next);
+            await startProblemNote(next);
           });
         }}>
           <label className="field">題目名稱<input value={linkedTitle} maxLength={200}
@@ -397,10 +459,10 @@ function App() {
       </>}
     </section>
     <div className="practice-stack">
-      <details className="panel shortlist">
+      <details className="panel shortlist" open={shortlistOpen} onToggle={e => setShortlistOpen(e.currentTarget.open)}>
         <summary>推薦題目{selection.items.length > 0 && `（${selection.items.length}）`}</summary><p className="reason">{selection.reason}</p>
         {selection.items.map(p => <button key={p.id} type="button" className="candidate" aria-pressed={p.id === problem?.id}
-          disabled={!!busy} onClick={async () => { if (p.id !== problem?.id && await confirmSwitch()) choose(p, practiceLanguage, practiceTopic); }}>
+          disabled={!!busy} onClick={async () => { if (p.id !== problem?.id && await confirmSwitch()) await openPracticeProblem(p, practiceLanguage, practiceTopic).catch(error); }}>
           <span>{p.title}</span><small>{platform[p.platform]} · {p.rating ?? stars(p.level)} · {data.focuses[p.focus]}</small>
         </button>)}
         <div className="row action-row">

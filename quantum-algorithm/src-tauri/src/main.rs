@@ -63,6 +63,7 @@ struct App {
     chatgpt: tokio::sync::Mutex<Option<chatgpt::Session>>,
     remote: Mutex<Vec<Problem>>,
     added: Mutex<Vec<Problem>>,
+    note_writes: Mutex<()>,
     catalog: Catalog,
     http: reqwest::Client,
 }
@@ -426,7 +427,13 @@ async fn coach(app: State<'_, App>, data: Value) -> Result<Value> {
 }
 
 #[tauri::command]
+fn reopen_problem(app: State<App>, id: String) -> Result<Problem> {
+    app.problem(&id)
+}
+
+#[tauri::command]
 fn save_note(app: State<App>, data: Value) -> Result<String> {
+    let _write = app.note_writes.lock().unwrap();
     let problem = app.problem(&text(&data, "problem", 150)?)?;
     let result = text(&data, "result", 20)?;
     let focus = text(&data, "focus", 30)?;
@@ -447,6 +454,10 @@ fn save_note(app: State<App>, data: Value) -> Result<String> {
         problem.title, problem.url, app.catalog.topics[&note.topic].name, note.date, note.language, note.observation);
     let dir = app.notes_path();
     let mut filename = text(&data, "file", 64)?;
+    if filename.is_empty() {
+        filename = app.notes()?.into_iter().find(|(_, existing)| existing.problem == note.problem)
+            .map(|(file, _)| file).unwrap_or_default();
+    }
     if filename.is_empty() {
         filename = format!("qa-{}-{}.md", Local::now().format("%Y%m%d"), uuid::Uuid::new_v4().simple());
     } else {
@@ -499,6 +510,7 @@ fn archive_note(dir: &Path, file: &str) -> Result<()> {
 
 #[tauri::command]
 fn delete_note(app: State<App>, file: String) -> Result<()> {
+    let _write = app.note_writes.lock().unwrap();
     archive_note(&app.notes_path(), &file)
 }
 
@@ -561,12 +573,13 @@ fn main() {
                 chatgpt: tokio::sync::Mutex::new(None),
                 remote: Mutex::new(remote),
                 added: Mutex::new(added),
+                note_writes: Mutex::new(()),
                 catalog,
                 http: reqwest::Client::builder().timeout(std::time::Duration::from_secs(40)).build()?,
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![app_state, save_settings, search_problems, add_linked_problem, recommend, coach, save_note, delete_note, sync_codeforces, open_problem, open_notes,
+        .invoke_handler(tauri::generate_handler![app_state, save_settings, search_problems, add_linked_problem, recommend, coach, reopen_problem, save_note, delete_note, sync_codeforces, open_problem, open_notes,
             judges::open_judge, judges::refresh_codeforces_catalog, practice::cpp_check, practice::import_samples,
             chatgpt::chatgpt_sign_in, chatgpt::chatgpt_sign_out, chatgpt::chatgpt_model])
         .run(tauri::generate_context!())
