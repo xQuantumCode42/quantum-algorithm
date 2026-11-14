@@ -547,3 +547,980 @@ for (const [id, title, category, , principle, example] of extra) {
   add(id, title, category, headers + "\n" + code,
     ["## 原理", principle, "## 手推範例", example, "## 複雜度與使用條件", limits].join("\n\n"));
 }
+
+add("pbds-ordered-set", "PBDS ordered_set 排名與第 k 小", "GNU PBDS", `
+#include <functional>
+#include <ext/pb_ds/assoc_container.hpp>
+#include <ext/pb_ds/tree_policy.hpp>
+
+using OrderedSet = __gnu_pbds::tree<
+    int, __gnu_pbds::null_type, std::less<int>,
+    __gnu_pbds::rb_tree_tag, __gnu_pbds::tree_order_statistics_node_update>;
+
+void example_ordered_set() {
+    OrderedSet s;
+    s.insert(10);
+    s.insert(30);
+    s.insert(20);
+    auto rank = s.order_of_key(20); // 1
+    auto second = s.find_by_order(1); // points to 20
+    if (second != s.end()) s.erase(*second);
+    (void)rank;
+}
+`, `
+## 什麼時候用
+需要一邊插入或刪除數值，一邊問「多少個值比 x 小？」或「第 k 小是誰？」時，用 ordered_set 可以直接查。普通 std::set 會排序，但從頭走到第 k 個需要逐步移動迭代器。
+## 為什麼查得快
+每個樹節點記住子樹大小。找第 k 小時，先看左子樹有幾個元素。如果 k 比左邊數量小，就往左。如果剛好相等，當前節點就是答案。否則跳過左子樹和自己，再往右找。
+## 手推
+插入 10、30、20，排序後是 [10,20,30]。order_of_key(20) 回傳 1，因為只有 10 嚴格小於 20。order_of_key(25) 回傳 2，即使 25 沒有插入。find_by_order(0) 是最小值 10，find_by_order(3) 回傳 end()。
+## 複雜度與限制
+插入、刪除、排名、第 k 小都是 O(log n)，選位次從 0 開始。這份模板的鍵值不能重複。需要 GNU GCC / libstdc++ 提供的 PBDS，Apple 系統預設的 clang++ / libc++ 編譯不了。
+`);
+
+add("pbds-ordered-multiset", "PBDS ordered_multiset 重複值排名", "GNU PBDS", `
+#include <functional>
+#include <limits>
+#include <utility>
+#include <ext/pb_ds/assoc_container.hpp>
+#include <ext/pb_ds/tree_policy.hpp>
+
+struct OrderedMultiset {
+    using Key = std::pair<int, long long>;
+    using Tree = __gnu_pbds::tree<Key, __gnu_pbds::null_type,
+        std::less<Key>, __gnu_pbds::rb_tree_tag,
+        __gnu_pbds::tree_order_statistics_node_update>;
+    Tree values;
+    long long next_id = 0;
+
+    void insert(int x) { values.insert({x, next_id++}); }
+    bool erase_one(int x) {
+        auto it = values.lower_bound({x, 0});
+        if (it == values.end() || it->first != x) return false;
+        Key key = *it;
+        values.erase(key);
+        return true;
+    }
+    auto count_less(int x) const { return values.order_of_key({x, 0}); }
+    auto count_equal(int x) const {
+        return values.order_of_key({x, std::numeric_limits<long long>::max()}) - count_less(x);
+    }
+    auto find_by_order(Tree::size_type k) const { return values.find_by_order(k); }
+};
+`, `
+## 怎麼容納重複值
+每次插入 x 時，把它和唯一的流水號組成 (x,id)。pair 先比 x，再比 id，所以所有相同的 x 排在同一段，卻仍然是不同的鍵。
+## 手推
+依序插入 7、7、3，樹的順序為 (3,2)、(7,0)、(7,1)。count_less(7) 是 1，count_equal(7) 是 2。erase_one(7) 從第一個 7 下手，留下另一個 7。find_by_order(1) 回傳迭代器，檢查和 values.end() 不同後用 it->first 取得原值。
+## 複雜度與限制
+每項常用操作 O(log n)。保持嚴格排序 std::less；less_equal 不符合 PBDS 樹的比較規則。需使用 GNU GCC / libstdc++。流水號必須保持唯一且小於 long long 最大值。
+`);
+
+add("pbds-hash", "PBDS gp_hash_table 雜湊表", "GNU PBDS", `
+#include <ext/pb_ds/assoc_container.hpp>
+using FastCount = __gnu_pbds::gp_hash_table<int, int>;
+
+int frequency_example() {
+    FastCount frequency;
+    for (int x : {3, 4, 3}) ++frequency[x];
+    auto it = frequency.find(3);
+    return it == frequency.end() ? 0 : it->second;
+}
+`, `
+## 什麼時候用
+要計數或快速查鍵值，且不需要鍵值保持排序時，可以考慮 gp_hash_table。它把雜湊後的鍵放進表格；發生碰撞時，照探測規則找下一個可用位置。
+## 手推
+依序掃描 [3,4,3]，frequency[3] 第一次建立值 0 後加到 1，第二次遇到 3 加到 2。只想查鍵是否存在時，用 find，因為 operator[] 可能建立新鍵。
+## 複雜度與限制
+插入及查找通常平均 O(1)，碰撞嚴重時可能退化。重新配置表格後，不應繼續使用原本取得的迭代器。需要 GNU GCC / libstdc++。若要可攜的 C++ 標準函式庫，用 std::unordered_map。
+`);
+
+add("merge-sort","合併排序與逆序對","陣列與查詢",`
+#include <algorithm>
+#include <vector>
+long long merge_sort(std::vector<int>& a) {
+    std::vector<int> temp(a.size());
+    auto sort = [&](auto&& self, int l, int r) -> long long {
+        if (r-l < 2) return 0;
+        int m=l+(r-l)/2;
+        long long count=self(self,l,m)+self(self,m,r);
+        int i=l,j=m,k=l;
+        while(i<m && j<r) {
+            if(a[i]<=a[j]) temp[k++]=a[i++];
+            else { temp[k++]=a[j++]; count+=m-i; }
+        }
+        while(i<m) temp[k++]=a[i++];
+        while(j<r) temp[k++]=a[j++];
+        std::copy(temp.begin()+l,temp.begin()+r,a.begin()+l);
+        return count;
+    };
+    return sort(sort,0,a.size());
+}
+`,`
+## 原理
+先把兩半各自排好。兩個指標比較兩邊尚未取出的最小元素。右半的值若比左半目前值小，它也比左半所有剩餘元素小，所以一次計入 m-i 個逆序對。
+## 手推
+[4,1,3,2] 先排成 [1,4] 和 [2,3]。取 2、3 時各與 4 構成逆序，加上兩半內原有的兩對，共 4 對。
+## 使用條件
+O(n log n) 時間，O(n) 額外空間。相等元素先取左側，因此排序穩定。
+`);
+
+add("heap-comparator","自訂 priority_queue 排序","C++ 工具",`
+#include <queue>
+#include <vector>
+struct Job { int priority, arrival; };
+struct ComesLater {
+    bool operator()(const Job& a, const Job& b) const {
+        if (a.priority != b.priority) return a.priority < b.priority;
+        return a.arrival > b.arrival;
+    }
+};
+using JobQueue = std::priority_queue<Job,std::vector<Job>,ComesLater>;
+`,`
+## 原理
+比較器回傳 true 表示 a 應排在 b 後面。這裡優先級越大越早，優先級相同時到達較早的先。比較器必須嚴格排序，相同的工作互相比較都回傳 false。
+## 手推
+加入 (8,4)、(6,0)、(8,2)，取出順序為 (8,2)、(8,4)、(6,0)。
+## 使用條件
+top O(1)，push/pop O(log n)。用具名函式物件可讓編譯器看見比較器型別，也可用無 capture lambda。
+`);
+
+add("flat-edges","邊結構與前向星","圖論",`
+#include <vector>
+struct FlatGraph {
+    struct Edge { int to, next; long long weight; };
+    std::vector<int> head;
+    std::vector<Edge> edges;
+    explicit FlatGraph(int n):head(n,-1) {}
+    void add(int from,int to,long long weight=1) {
+        edges.push_back({to,head[from],weight});
+        head[from]=static_cast<int>(edges.size())-1;
+    }
+};
+`,`
+## 原理
+所有邊放在一個陣列。head[u] 是 u 的第一條邊；每條邊的 next 指到同一個起點的下一條邊。-1 是串列結尾。
+## 使用方式
+以 for(int i=g.head[u]; i!=-1; i=g.edges[i].next) 掃描出邊。add(0,1) 與 add(0,2) 後，0 的第一條邊指向 2，再指向 1。
+## 成本
+新增一條有向邊攤銷 O(1)，空間 O(V+E)。無向邊要各方向新增一次。
+`);
+
+add("kosaraju","Kosaraju 強連通分量","圖論",`
+#include <vector>
+std::vector<int> kosaraju(const std::vector<std::vector<int>>& g) {
+    int n=g.size(); std::vector<std::vector<int>> reverse(n);
+    for(int u=0;u<n;++u) for(int v:g[u]) reverse[v].push_back(u);
+    std::vector<bool> seen(n);
+    std::vector<int> order, comp(n,-1);
+    auto finish=[&](auto&& self,int u)->void {
+        seen[u]=true;
+        for(int v:g[u]) if(!seen[v]) self(self,v);
+        order.push_back(u);
+    };
+    auto mark=[&](auto&& self,int u,int c)->void {
+        comp[u]=c;
+        for(int v:reverse[u]) if(comp[v]<0) self(self,v,c);
+    };
+    for(int u=0;u<n;++u) if(!seen[u]) finish(finish,u);
+    int count=0;
+    for(auto it=order.rbegin();it!=order.rend();++it) if(comp[*it]<0) mark(mark,*it,count++);
+    return comp;
+}
+`,`
+## 原理
+強連通是有向圖裡能互相抵達的一組點。第一次 DFS 把點按離開的順序記下。第二次在反向圖依離開時間由晚到早走，當前起點能抵達的未分組點恰好在同一組。
+## 手推
+0↔1、1→2。0、1 可以互相回到對方，2 無法回到它們，所以得到兩組。
+## 成本
+O(V+E) 時間與空間。深圖可能超過遞迴堆疊，需改迭代版。
+`);
+
+add("tarjan-2sat","Tarjan SCC 與 2-SAT","圖論",`
+#include <algorithm>
+#include <optional>
+#include <vector>
+std::vector<int> tarjan(const std::vector<std::vector<int>>& g) {
+    int n=g.size(), time=0, count=0;
+    std::vector<int> enter(n,-1), low(n), comp(n,-1), stack;
+    auto dfs=[&](auto&& self,int u)->void {
+        low[u]=enter[u]=time++; stack.push_back(u);
+        for(int v:g[u]) {
+            if(enter[v]<0) { self(self,v); low[u]=std::min(low[u],low[v]); }
+            else if(comp[v]<0) low[u]=std::min(low[u],enter[v]);
+        }
+        if(low[u]!=enter[u]) return;
+        while(true) {
+            int v=stack.back(); stack.pop_back(); comp[v]=count;
+            if(v==u) break;
+        }
+        ++count;
+    };
+    for(int u=0;u<n;++u) if(enter[u]<0) dfs(dfs,u);
+    return comp;
+}
+struct TwoSat {
+    std::vector<std::vector<int>> g;
+    explicit TwoSat(int n):g(2*n) {}
+    // 2*i represents x_i; 2*i+1 represents its negation.
+    void clause(int a,int b) { g[a^1].push_back(b); g[b^1].push_back(a); }
+    std::optional<std::vector<bool>> solve() const {
+        auto c=tarjan(g); std::vector<bool> answer(g.size()/2);
+        for(int i=0;i<(int)answer.size();++i) {
+            if(c[2*i]==c[2*i+1]) return {};
+            answer[i]=c[2*i]<c[2*i+1];
+        }
+        return answer;
+    }
+};
+`,`
+## 原理
+Tarjan 邊走訪邊用堆疊保存尚未確定分組的點。low[u] 記錄 u 的子樹能回到的最早堆疊位置。當 low[u] 等於自己進入的時間，u 就是這組的根，可一次彈出整組。
+## 如何解 2-SAT
+(a 或 b) 等價於「非 a 推出 b」和「非 b 推出 a」。若某個變數和它的否定落在同組，任何賦值都互相矛盾。Tarjan 的組號按反拓撲順序產生，此版本把較早彈出的文字設為真。
+## 使用方式與成本
+clause(0,3) 表示 x0 或非 x1，clause(0,0) 強制 x0 為真。O(變數數量+子句數量)；遞迴深度同圖深度。
+`);
+
+add("spfa","SPFA 佇列鬆弛與負環","圖論",`
+#include <optional>
+#include <queue>
+#include <utility>
+#include <vector>
+std::optional<std::vector<long long>>
+spfa(const std::vector<std::vector<std::pair<int,int>>>& g,int s) {
+    constexpr long long inf=1LL<<60;
+    int n=g.size(); std::vector<long long> d(n,inf);
+    std::vector<int> length(n); std::vector<bool> queued(n);
+    std::queue<int> q; d[s]=0; q.push(s); queued[s]=true;
+    while(!q.empty()) {
+        int u=q.front(); q.pop(); queued[u]=false;
+        for(auto [v,w]:g[u]) if(d[u]+w<d[v]) {
+            d[v]=d[u]+w; length[v]=length[u]+1;
+            if(length[v]>=n) return {};
+            if(!queued[v]) { q.push(v); queued[v]=true; }
+        }
+    }
+    return d;
+}
+`,`
+## 原理
+只有距離變小的點才可能改善鄰居，所以把它放進待處理佇列。每次鬆弛還記下這條更短路徑的邊數，達到 n 時代表經過可達負環。
+## 手推
+0→1 為 4、0→2 為 6、1→2 為 -3。先記錄 2 的距離為 6；處理 1 後得到 1。
+## 限制
+最壞 O(VE)，可處理負邊。空結果表示從 s 可達負環。無邊用 inf 表示；若要檢測任意負環，可加連到所有點的零權超級源。
+`);
+
+add("dfs-relax","DFS 鬆弛與負環偵測","圖論",`
+#include <utility>
+#include <vector>
+bool has_negative_cycle_dfs(const std::vector<std::vector<std::pair<int,int>>>& g) {
+    std::vector<long long> d(g.size(),0);
+    std::vector<bool> active(g.size());
+    auto relax=[&](auto&& self,int u)->bool {
+        active[u]=true;
+        for(auto [v,w]:g[u]) if(d[u]+w<d[v]) {
+            if(active[v]) return true;
+            d[v]=d[u]+w;
+            if(self(self,v)) return true;
+        }
+        active[u]=false;
+        return false;
+    };
+    for(int u=0;u<(int)g.size();++u) if(relax(relax,u)) return true;
+    return false;
+}
+`,`
+## 原理
+把所有初始距離設成 0，相當於加了超級源。只沿會改善距離的邊遞迴。若改善又回到目前遞迴堆疊中的祖先，沿該段走完後代價比原來更小，代表負環。
+## 手推
+0→1 權重 -2，1→0 權重 1。從 0 出發後 d[1] = -2，接著能把堆疊中的 0 改善為 -1。
+## 限制
+此方法可能反覆走訪同一節點，最壞情況慢，深圖也會吃堆疊。需要穩定上界時用 Bellman–Ford。
+`);
+
+add("rolling-hash","多項式與雙模字串雜湊","字串",`
+#include <array>
+#include <string>
+#include <vector>
+struct RollingHash {
+    using Hash=std::array<long long,2>;
+    static constexpr Hash mod{1000000007,1000000009};
+    static constexpr long long base=911382323;
+    std::vector<Hash> h,p;
+    explicit RollingHash(const std::string& s):h(s.size()+1),p(s.size()+1) {
+        p[0]={1,1};
+        for(int i=0;i<(int)s.size();++i) for(int j=0;j<2;++j) {
+            h[i+1][j]=(h[i][j]*base+static_cast<unsigned char>(s[i])+1)%mod[j];
+            p[i+1][j]=p[i][j]*base%mod[j];
+        }
+    }
+    Hash range(int l,int r) const {
+        Hash ans{};
+        for(int j=0;j<2;++j)
+            ans[j]=(h[r][j]-h[l][j]*p[r-l][j]%mod[j]+mod[j])%mod[j];
+        return ans;
+    }
+};
+`,`
+## 原理
+把字串當成以 base 為底的整數，加入一字相當於乘 base 再加字元。用兩個模數存其餘數。切出 [l,r) 時，扣掉多乘了 r-l 次的舊前綴。
+## 使用方式
+在 banana 中比較 range(1,3) 和 range(3,5)，兩段都是 an。比較前先確認長度相同。也可用 unsigned 64 位自然溢位當模數，但仍要考慮碰撞。
+## 成本
+預處理 O(n)，每次區間雜湊 O(1)。雙模減少碰撞，仍不能保證完全相等。
+`);
+
+add("integer-digits","二進位與十進位位數","數論",`
+#include <bit>
+#include <cstdint>
+int binary_digits(std::uint64_t value) {
+    return value ? std::bit_width(value) : 1;
+}
+int decimal_digits(std::uint64_t value) {
+    int count=1;
+    while(value>=10) { value/=10; ++count; }
+    return count;
+}
+`,`
+## 原理
+二進位位數是最高那個 1 的位置加一。十進位反覆除以 10，每一次相當於移除最右邊的一位。避免用浮點 log 在 10 的冪附近判錯。
+## 手推
+1000 除以 10 三次變 1，因此有 4 位。二進位 101 有 3 位。通常把 0 算一位。
+## 成本
+binary_digits 使用 C++20 bit_width。decimal_digits O(log10 n)，此版本接受無號整數。
+`);
+
+add("ext-gcd","擴展歐幾里得與線性丟番圖方程","數論",`
+#include <optional>
+#include <tuple>
+std::tuple<long long,long long,long long> bezout(long long a,long long b) {
+    if(!b) return {a,1,0};
+    auto [g,x,y]=bezout(b,a%b);
+    return {g,y,x-(a/b)*y};
+}
+std::optional<std::pair<long long,long long>> solve_ax_by(long long a,long long b,long long c) {
+    auto [g,x,y]=bezout(a,b);
+    if(!g) return c ? std::nullopt : std::optional{std::pair{0LL,0LL}};
+    if(c%g) return {};
+    return std::pair{x*(c/g),y*(c/g)};
+}
+`,`
+## 原理
+先用歐幾里得求 gcd，再倒回每層把餘數改寫成 a−⌊a/b⌋b，得到係數 x、y 使 ax+by=gcd。當 gcd 整除 c，兩個係數同乘 c/gcd 就得到一組解。
+## 手推
+6x+9y=15 有 x=-5、y=5 這組解。6x+9y=4 無解，因為左側必定是 3 的倍數。
+## 成本
+O(log max(a,b))。傳非負 a、b；係數和乘積都必須能放進 long long。
+`);
+
+add("matrix-power","矩陣乘法與矩陣快速冪","數論",`
+#include <cstdint>
+#include <vector>
+using Matrix=std::vector<std::vector<long long>>;
+Matrix multiply(const Matrix& a,const Matrix& b,int mod) {
+    Matrix c(a.size(),std::vector<long long>(b.front().size()));
+    for(int i=0;i<(int)a.size();++i) for(int k=0;k<(int)b.size();++k)
+        for(int j=0;j<(int)b[k].size();++j)
+            c[i][j]=(c[i][j]+a[i][k]*b[k][j])%mod;
+    return c;
+}
+Matrix matrix_pow(Matrix a,std::uint64_t exp,int mod) {
+    Matrix ans(a.size(),std::vector<long long>(a.size()));
+    for(int i=0;i<(int)a.size();++i) ans[i][i]=1%mod;
+    while(exp) {
+        if(exp&1) ans=multiply(ans,a,mod);
+        a=multiply(a,a,mod); exp>>=1;
+    }
+    return ans;
+}
+`,`
+## 原理
+當下一步狀態是目前狀態的線性組合，可以用矩陣乘上狀態向量。要走很多步，就把轉移矩陣快速平方。
+## 手推
+Fibonacci 的轉移 [[1,1],[1,0]] 乘 [F(n),F(n-1)] 得到 [F(n+1),F(n)]。矩陣二次方代表一次走兩步。
+## 成本
+方陣 k×k，O(k³ log exp)。mod 要為正，矩陣非空且維度相容，元素先化成 [0,mod)。
+`);
+
+add("lucas","Lucas 定理 二項式係數","數論",`
+#include <vector>
+struct Lucas {
+    int p; std::vector<long long> fact, invfact;
+    long long power(long long a,int e) const {
+        long long r=1;
+        for(;e;e>>=1,a=a*a%p) if(e&1) r=r*a%p;
+        return r;
+    }
+    explicit Lucas(int prime):p(prime),fact(p,1),invfact(p,1) {
+        for(int i=1;i<p;++i) fact[i]=fact[i-1]*i%p;
+        invfact[p-1]=power(fact[p-1],p-2);
+        for(int i=p-1;i>0;--i) invfact[i-1]=invfact[i]*i%p;
+    }
+    long long choose(unsigned long long n,unsigned long long k) const {
+        long long ans=1;
+        while(n || k) {
+            int a=n%p,b=k%p;
+            if(b>a) return 0;
+            ans=ans*fact[a]%p*invfact[b]%p*invfact[a-b]%p;
+            n/=p; k/=p;
+        }
+        return ans;
+    }
+};
+`,`
+## 原理
+要算 C(n,k) mod p 且 n 很大時，把 n 和 k 寫成 p 進位。Lucas 定理說答案等於各位 C(ni,ki) 的乘積。原因是模質數 p 下 (1+x)^p ≡ 1+x^p，中間係數都可被 p 整除。
+## 手推
+p=5，n=7→12，k=2→02，所以 C(7,2) mod 5 = C(1,0)×C(2,2)=1。
+## 成本
+預處理 O(p)，查詢 O(log_p n)。p 必須是質數且能配置 p 格空間。
+`);
+
+add("factorization","試除法 質因數分解","數論",`
+#include <utility>
+#include <vector>
+std::vector<std::pair<long long,int>> factorize(long long n) {
+    std::vector<std::pair<long long,int>> result;
+    for(long long p=2;p<=n/p;p+=(p==2?1:2)) if(n%p==0) {
+        int count=0;
+        do { n/=p; ++count; } while(n%p==0);
+        result.push_back({p,count});
+    }
+    if(n>1) result.push_back({n,1});
+    return result;
+}
+`,`
+## 原理
+從小到大測試能否整除。找到因數就除到不能再除。剩餘值若大於 1，而且所有不超過平方根的因數都驗過，它本身就是質數。
+## 手推
+84 除兩次 2、一次 3，剩下 7，得到 2²×3×7。1 回傳空因數表。
+## 成本
+最壞 O(√n)。適合少量不太大的正整數。大量小查詢可用 SPF。
+`);
+
+add("lazy-segment","懶標記線段樹 區間加與區間和","資料結構",`
+#include <vector>
+struct LazySum {
+    int n; std::vector<long long> sum,pending;
+    explicit LazySum(int size):n(size),sum(4*n),pending(4*n) {}
+    void apply(int p,int length,long long delta) {
+        sum[p]+=length*delta; pending[p]+=delta;
+    }
+    void push(int p,int l,int r) {
+        int m=l+(r-l)/2;
+        apply(2*p,m-l,pending[p]); apply(2*p+1,r-m,pending[p]);
+        pending[p]=0;
+    }
+    long long visit(int p,int l,int r,int a,int b,long long delta,bool update) {
+        if(r<=a || b<=l) return 0;
+        if(a<=l && r<=b) {
+            if(update) apply(p,r-l,delta);
+            return sum[p];
+        }
+        push(p,l,r);
+        int m=l+(r-l)/2;
+        auto left=visit(2*p,l,m,a,b,delta,update);
+        auto right=visit(2*p+1,m,r,a,b,delta,update);
+        sum[p]=sum[2*p]+sum[2*p+1];
+        return left+right;
+    }
+    void add(int l,int r,long long value) { if(l<r) visit(1,0,n,l,r,value,true); }
+    long long query(int l,int r) { return l<r ? visit(1,0,n,l,r,0,false) : 0; }
+};
+`,`
+## 原理
+整段加 v 時，該段總和直接加上長度乘 v，並把 v 累加在 pending。等到未來操作只覆蓋一部分，才用 push 把尚未處理的增量傳給兩個孩子。
+## 手推
+四個零，對 [0,4) 加 3 後，根總和為 12。查 [1,3) 才逐層把 3 傳下去，得到 6。
+## 成本
+O(log n) 每次，O(n) 空間，使用 0-based 半開區間。這份標記的意思是「加上」，若要支援指定某值，標記合併規則也要改。
+`);
+
+add("dynamic-segment","動態開點線段樹","資料結構",`
+#include <memory>
+struct DynamicSum {
+    struct Node { long long sum=0; std::unique_ptr<Node> left,right; };
+    std::unique_ptr<Node> root;
+    static void add(std::unique_ptr<Node>& p,long long l,long long r,long long at,long long delta) {
+        if(!p) p=std::make_unique<Node>();
+        p->sum+=delta;
+        if(r-l==1) return;
+        auto m=l+(r-l)/2;
+        if(at<m) add(p->left,l,m,at,delta); else add(p->right,m,r,at,delta);
+    }
+    static long long query(const Node* p,long long l,long long r,long long a,long long b) {
+        if(!p || b<=l || r<=a) return 0;
+        if(a<=l && r<=b) return p->sum;
+        auto m=l+(r-l)/2;
+        return query(p->left.get(),l,m,a,b)+query(p->right.get(),m,r,a,b);
+    }
+};
+`,`
+## 原理
+座標可能到十億，但只更新幾個座標。把樹視為一開始全為零，某一分支首次更新才配置；空指標代表整段都是零。
+## 手推
+在 [0,10⁹) 對位置 8 加 5，只建立從根走到 8 的節點。查 [9,12) 時，不需要為沒用過的分支配置記憶體。
+## 成本
+O(log U) 每次，q 次更新使用 O(q log U) 空間。U 是值域寬度，傳入的座標必須在根的半開區間內。
+`);
+
+add("bipartite-matching","匈牙利增廣路 二分圖最大匹配","圖論",`
+#include <algorithm>
+#include <vector>
+std::vector<int> match_right(const std::vector<std::vector<int>>& adj,int rights) {
+    std::vector<int> owner(rights,-1), seen(rights,-1);
+    auto augment=[&](auto&& self,int left,int stamp)->bool {
+        for(int r:adj[left]) if(seen[r]!=stamp) {
+            seen[r]=stamp;
+            if(owner[r]<0 || self(self,owner[r],stamp)) { owner[r]=left; return true; }
+        }
+        return false;
+    };
+    for(int l=0;l<(int)adj.size();++l) augment(augment,l,l);
+    return owner;
+}
+`,`
+## 原理
+如果一位左側成員想配已被占用的右點，就試著替舊主人找另一個位置。沿著「未用邊、已配對邊」交替走到空位，把路上的配對翻轉，總配對數增加一。
+## 手推
+A 可選 1 或 2，B 只可選 1。若 A 先配 1，B 可以要求 A 改配 2，再取得 1。
+## 成本
+最壞 O(L·E)，回傳每個右點的左側主人或 -1。此版本求最大數量，若題目每個配對有成本，需要加權指派算法。
+`);
+
+add("hungarian-cost","Hungarian 加權指派","圖論",`
+#include <limits>
+#include <utility>
+#include <vector>
+std::pair<long long,std::vector<int>> assign_min(const std::vector<std::vector<int>>& costs) {
+    int n=costs.size(), m=n?costs.front().size():0;
+    constexpr long long inf=std::numeric_limits<long long>::max()/4;
+    std::vector<long long> u(n+1),v(m+1);
+    std::vector<int> p(m+1),prev(m+1);
+    for(int i=1;i<=n;++i) {
+        p[0]=i; int j=0;
+        std::vector<long long> slack(m+1,inf);
+        std::vector<bool> used(m+1);
+        do {
+            used[j]=true; int row=p[j], next=0; long long delta=inf;
+            for(int k=1;k<=m;++k) if(!used[k]) {
+                long long reduced=costs[row-1][k-1]-u[row]-v[k];
+                if(reduced<slack[k]) { slack[k]=reduced; prev[k]=j; }
+                if(slack[k]<delta) { delta=slack[k]; next=k; }
+            }
+            for(int k=0;k<=m;++k) {
+                if(used[k]) { u[p[k]]+=delta; v[k]-=delta; }
+                else slack[k]-=delta;
+            }
+            j=next;
+        } while(p[j]);
+        while(j) { p[j]=p[prev[j]]; j=prev[j]; }
+    }
+    std::vector<int> picked(n,-1);
+    for(int j=1;j<=m;++j) if(p[j]) picked[p[j]-1]=j-1;
+    return {-v[0],picked};
+}
+`,`
+## 原理
+每列與每欄各有一個勢能。邊的成本扣除兩端勢能後叫縮減成本。先沿縮減成本零的邊找增廣路；走不通就用最小的 slack 更新勢能，讓下一條可走的邊成為零。
+## 手推
+成本為 [[4,1],[2,3]] 時，第一人選第二欄、第二人選第一欄，合計 3，比對角線的 7 少。
+## 成本
+O(n²m)，必須 n≤m，且成本矩陣每列等長。回傳最小成本與每列的 0-based 欄位。
+`);
+
+add("lca","二元提升 LCA 最近共同祖先","樹論",`
+#include <bit>
+#include <queue>
+#include <vector>
+struct Lca {
+    std::vector<int> depth;
+    std::vector<std::vector<int>> up;
+    Lca(const std::vector<std::vector<int>>& tree,int root)
+      :depth(tree.size(),-1),up(std::bit_width(tree.size()),std::vector<int>(tree.size(),root)) {
+        std::queue<int> q; q.push(root); depth[root]=0;
+        while(!q.empty()) {
+            int u=q.front(); q.pop();
+            for(int v:tree[u]) if(depth[v]<0) {
+                depth[v]=depth[u]+1; up[0][v]=u; q.push(v);
+            }
+        }
+        for(int k=1;k<(int)up.size();++k) for(int u=0;u<(int)depth.size();++u)
+            up[k][u]=up[k-1][up[k-1][u]];
+    }
+    int query(int a,int b) const {
+        if(depth[a]<depth[b]) return query(b,a);
+        unsigned diff=depth[a]-depth[b];
+        for(int k=0;diff;++k,diff>>=1) if(diff&1) a=up[k][a];
+        if(a==b) return a;
+        for(int k=(int)up.size()-1;k>=0;--k) if(up[k][a]!=up[k][b]) {
+            a=up[k][a]; b=up[k][b];
+        }
+        return up[0][a];
+    }
+};
+`,`
+## 原理
+up[k][x] 是往上跳 2^k 的祖先，可用兩次較小的跳躍算出。查詢時先把較深點拉到同一層，再由大到小嘗試同時跳，使兩點維持在不同分支，最後它們的父節點相同。
+## 手推
+0 是根，0 的孩子 1 和 2，1 的孩子 3。查 (3,2) 時，3 先升到 1，最後兩者共同父親為 0。
+## 成本
+建立 O(n log n)，查詢 O(log n)。兩個點都必須在同一棵有根樹。
+`);
+
+add("centroid","樹重心分解","樹論",`
+#include <vector>
+struct CentroidTree {
+    const std::vector<std::vector<int>>& g;
+    std::vector<int> size,parent;
+    std::vector<bool> removed;
+    explicit CentroidTree(const std::vector<std::vector<int>>& graph)
+      :g(graph),size(g.size()),parent(g.size(),-1),removed(g.size()) {
+        if(!g.empty()) build(0,-1);
+    }
+    int measure(int u,int p) {
+        size[u]=1;
+        for(int v:g[u]) if(v!=p && !removed[v]) size[u]+=measure(v,u);
+        return size[u];
+    }
+    int locate(int u,int p,int half) {
+        for(int v:g[u]) if(v!=p && !removed[v] && size[v]>half) return locate(v,u,half);
+        return u;
+    }
+    void build(int start,int previous) {
+        int half=measure(start,-1)/2;
+        int c=locate(start,-1,half);
+        removed[c]=true; parent[c]=previous;
+        for(int v:g[c]) if(!removed[v]) build(v,c);
+    }
+};
+`,`
+## 原理
+移除重心後，每個剩餘子樹都最多是原本一半。沿著超過一半的子樹走就能找到重心。每次移除一個重心，再對各塊重複，得到只有 O(log n) 層的重心樹。
+## 手推
+1—2—3—4—5 先選 3，兩個大小 2 的部分各自再選自己的重心。
+## 使用條件
+建構 O(n log n)。適用樹上距離計數與最近標記點等分治問題。模板只建立重心父陣列，查詢需按題目另加距離資料；長鏈需留意遞迴堆疊。
+`);
+
+add("geometry-basic","向量、叉積與線段相交","計算幾何",`
+#include <algorithm>
+struct Point { long long x,y; };
+long long cross(Point a,Point b,Point c) {
+    return (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+}
+bool on_segment(Point a,Point b,Point p) {
+    return cross(a,b,p)==0 && std::min(a.x,b.x)<=p.x && p.x<=std::max(a.x,b.x)
+        && std::min(a.y,b.y)<=p.y && p.y<=std::max(a.y,b.y);
+}
+int sign(long long x) { return (x>0)-(x<0); }
+bool intersects(Point a,Point b,Point c,Point d) {
+    int p=sign(cross(a,b,c)),q=sign(cross(a,b,d));
+    int r=sign(cross(c,d,a)),s=sign(cross(c,d,b));
+    if(p*q<0 && r*s<0) return true;
+    return on_segment(a,b,c)||on_segment(a,b,d)||on_segment(c,d,a)||on_segment(c,d,b);
+}
+`,`
+## 原理
+叉積的正負告訴你 c 在有向直線 a→b 的哪一側。兩線段各自跨越對方所在的線時相交，也要額外處理端點接觸與共線重疊。
+## 手推
+(0,0) 到 (2,2) 與 (0,2) 到 (2,0) 互相跨過對方，在 (1,1) 相交。
+## 成本
+每次 O(1)，含端點接觸。整數座標限制 ±10⁹ 以避免 long long 溢位。
+`);
+
+add("circle-intersection","圓與圓交點","計算幾何",`
+#include <algorithm>
+#include <cmath>
+#include <vector>
+struct Point { double x,y; };
+struct Circle { Point c; double r; };
+std::vector<Point> circle_intersections(Circle a,Circle b) {
+    constexpr double eps=1e-9;
+    double x=b.c.x-a.c.x,y=b.c.y-a.c.y,d=std::hypot(x,y);
+    if(d<eps || d>a.r+b.r+eps || d<std::abs(a.r-b.r)-eps) return {};
+    double along=(a.r*a.r-b.r*b.r+d*d)/(2*d);
+    double h=std::sqrt(std::max(0.0,a.r*a.r-along*along));
+    Point base{a.c.x+x*along/d,a.c.y+y*along/d};
+    if(h<eps) return {base};
+    return {{base.x-y*h/d,base.y+x*h/d},{base.x+y*h/d,base.y-x*h/d}};
+}
+`,`
+## 原理
+兩圓交點共有一條弦，弦的中點在兩圓圓心連線上。把交點同時代入兩圓方程並相減，求出中點到圓心的距離 along，再用畢氏定理求弦的半長 h。
+## 手推
+半徑都為 1，圓心是 (0,0) 和 (2,0)，弦長變成 0，所以只有切點 (1,0)。
+## 使用條件
+O(1)。半徑非負。同心重合會有無限交點，呼叫端要另外辨識；函式只回傳有限個交點。
+`);
+
+add("circumcenter","三角形外心","計算幾何",`
+#include <cmath>
+#include <optional>
+struct Point { double x,y; };
+std::optional<Point> circumcenter(Point a,Point b,Point c) {
+    double bx=b.x-a.x,by=b.y-a.y,cx=c.x-a.x,cy=c.y-a.y;
+    double det=2*(bx*cy-by*cx);
+    if(std::abs(det)<1e-12) return {};
+    double b2=bx*bx+by*by,c2=cx*cx+cy*cy;
+    return Point{a.x+(cy*b2-by*c2)/det,a.y+(bx*c2-cx*b2)/det};
+}
+`,`
+## 原理
+外心到三個頂點等距。所以它同時落在任兩邊的垂直平分線上。把座標原點移到 a，將距離平方相減，可得到兩條一次方程。
+## 手推
+三角形 (0,0)、(2,0)、(0,2) 的兩條垂直平分線為 x=1 和 y=1，交於 (1,1)。
+## 成本
+O(1)，三點共線時無唯一外心。浮點容差要依座標尺度調整。
+`);
+
+add("circle-union","多個圓的聯集面積","計算幾何",`
+#include <algorithm>
+#include <cmath>
+#include <numbers>
+#include <utility>
+#include <vector>
+struct Disk { double x,y,r; };
+double disk_union(const std::vector<Disk>& disks) {
+    constexpr double full=2*std::numbers::pi;
+    constexpr double eps=1e-10;
+    double twice=0;
+    for(int i=0;i<(int)disks.size();++i) {
+        auto [x,y,r]=disks[i];
+        if(r<=0) continue;
+        bool hidden=false;
+        std::vector<std::pair<double,double>> spans;
+        for(int j=0;j<(int)disks.size();++j) if(i!=j) {
+            auto [u,v,s]=disks[j];
+            double dx=u-x,dy=v-y,d=std::hypot(dx,dy);
+            if(d+r<=s+eps && (d>eps || s>r+eps || j<i)) { hidden=true; break; }
+            if(d<=eps || d>=r+s || d+s<=r) continue;
+            double middle=std::atan2(dy,dx);
+            double width=std::acos(std::clamp((r*r+d*d-s*s)/(2*r*d),-1.0,1.0));
+            double lo=std::fmod(middle-width+full,full), hi=lo+2*width;
+            spans.push_back({lo,std::min(full,hi)});
+            if(hi>full) spans.push_back({0,hi-full});
+        }
+        if(hidden) continue;
+        auto integrate=[&](double a,double b) {
+            twice+=r*r*(b-a)+r*x*(std::sin(b)-std::sin(a))
+                +r*y*(std::cos(a)-std::cos(b));
+        };
+        std::sort(spans.begin(),spans.end());
+        double last=0;
+        for(auto [a,b]:spans) {
+            if(a>last) integrate(last,a);
+            last=std::max(last,b);
+        }
+        if(last<full) integrate(last,full);
+    }
+    return twice/2;
+}
+`,`
+## 原理
+聯集的邊界只包含每個圓未被其他圓蓋住的弧。對每對相交的圓算出覆蓋角度，把跨 2π 的區間切開，排序後只積分沒有被覆蓋的空隙。沿邊界對 x dy − y dx 積分並除以 2，就得到面積。
+## 手推
+兩個單位圓完全分離時，兩條完整圓周各貢獻 π。完全重合時只保留一條圓周，答案 π。
+## 成本
+O(n² log n)，使用浮點數。尺度極端或近乎相切時，容差需要依題目精度調整。
+`);
+
+add("pair-hash","pair 鍵與自訂雜湊","C++ 工具",`
+#include <cstddef>
+#include <functional>
+#include <unordered_map>
+#include <utility>
+struct PairHash {
+    std::size_t operator()(const std::pair<int,int>& a) const {
+        std::size_t x=std::hash<int>{}(a.first), y=std::hash<int>{}(a.second);
+        return x ^ (y + 0x9e3779b9U + (x<<6) + (x>>2));
+    }
+};
+using GridCounter=std::unordered_map<std::pair<int,int>,int,PairHash>;
+`,`
+## 原理
+pair 沒有可直接依賴的標準雜湊。先雜湊各欄位，再混入不同位移。單純 XOR 會讓 (1,2) 和 (2,1) 永遠同值。
+## 手推與用法
+GridCounter cells; ++cells[{2,3}]; 能做稀疏格子的計數。查詢是否存在時用 find，避免建立空項。
+## 成本
+平均 O(1)。雜湊碰撞不會讓不同鍵變成同一筆，容器仍會比較相等。大量惡意碰撞時可能退化。
+`);
+
+add("salted-hash","加鹽 64 位雜湊與 PBDS","GNU PBDS",`
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <unordered_map>
+#include <ext/pb_ds/assoc_container.hpp>
+struct SaltHash {
+    std::size_t operator()(std::uint64_t x) const {
+        static const auto seed=static_cast<std::uint64_t>(
+            std::chrono::steady_clock::now().time_since_epoch().count());
+        x+=seed+0x9e3779b97f4a7c15ULL;
+        x=(x^(x>>30))*0xbf58476d1ce4e5b9ULL;
+        x=(x^(x>>27))*0x94d049bb133111ebULL;
+        return x^(x>>31);
+    }
+};
+using StandardCounter=std::unordered_map<std::uint64_t,int,SaltHash>;
+using GnuCounter=__gnu_pbds::gp_hash_table<std::uint64_t,int,SaltHash>;
+`,`
+## 原理
+把啟動時取得的種子加到鍵值，再用 SplitMix64 的混合步驟擴散位元。這會改變不同執行階段的碰撞分佈，讓固定輸入較難造成同一群碰撞。
+## 使用方式
+兩個 alias 都可用 ++counts[key] 計數，同一個程序內相同鍵仍會得到相同雜湊。
+## 限制
+不是密碼學雜湊。GnuCounter 需要 GNU libstdc++；只用 StandardCounter 可移除 PBDS 的 include 和 alias。
+`);
+
+add("fast-io","快速輸入與 C++ 競賽起手式","C++ 工具",`
+#include <iostream>
+#include <limits>
+
+bool read_int(int& result) {
+    std::istream& in=std::cin;
+    if(!(in>>std::ws)) return false;
+    bool negative=in.peek()=='-';
+    if(negative || in.peek()=='+') in.get();
+    long long limit=negative ? -static_cast<long long>(std::numeric_limits<int>::min()) : std::numeric_limits<int>::max();
+    long long value=0;
+    bool seen=false, overflow=false;
+    while(in.peek()>='0' && in.peek()<='9') {
+        int digit=in.get()-'0'; seen=true;
+        if(value>(limit-digit)/10) overflow=true;
+        else if(!overflow) value=10*value+digit;
+    }
+    if(!seen || overflow) return false;
+    result=static_cast<int>(negative?-value:value);
+    return true;
+}
+
+int main() {
+    std::ios::sync_with_stdio(false);
+    std::cin.tie(nullptr);
+    int n;
+    if(read_int(n)) std::cout << n << '\\n';
+}
+`,`
+## 原理
+關掉與 C I/O 的同步可減少額外工作。cin.tie(nullptr) 讓讀取時不必每次沖洗輸出。read_int 示範逐字元跳過空白、辨識符號及檢查整數溢位。
+## 用法
+多數題目直接 cin >> n 就夠快。要互動時，送出詢問後手動 flush。關閉同步後避免混用 scanf 和 cin。
+## Pragma 與最佳化
+優先用編譯選項 -O2 及適合的演算法。GCC 的 optimize 或 target pragma 並非標準 C++，不應硬指定評測機不保證的 SSE/AVX 指令。Ofast 也可能改變浮點語意。
+`);
+
+add("circle-overlap","圓交集面積與直線交點","計算幾何",`
+#include <algorithm>
+#include <cmath>
+#include <numbers>
+#include <vector>
+struct Point { double x,y; };
+double overlap(double r,double s,double d) {
+    if(d>=r+s) return 0;
+    if(d<=std::abs(r-s)) return std::numbers::pi*std::min(r,s)*std::min(r,s);
+    auto segment=[](double radius,double offset) {
+        double c=std::clamp(offset/radius,-1.0,1.0);
+        return radius*radius*(std::acos(c)-c*std::sqrt(1-c*c));
+    };
+    double x=(d*d+r*r-s*s)/(2*d);
+    return segment(r,x)+segment(s,d-x);
+}
+std::vector<Point> line_circle(Point a,Point b,Point center,double radius) {
+    double dx=b.x-a.x,dy=b.y-a.y,len=std::hypot(dx,dy);
+    if(!len) return {};
+    dx/=len; dy/=len;
+    double q=(center.x-a.x)*dx+(center.y-a.y)*dy;
+    Point base{a.x+q*dx,a.y+q*dy};
+    double distance=std::hypot(base.x-center.x,base.y-center.y);
+    if(distance>radius+1e-10) return {};
+    double h=std::sqrt(std::max(0.0,radius*radius-distance*distance));
+    if(h<1e-10) return {base};
+    return {{base.x-h*dx,base.y-h*dy},{base.x+h*dx,base.y+h*dy}};
+}
+`,`
+## 原理
+重疊的兩圓由共同弦切成兩塊弓形。每塊等於扇形面積減三角形面積；包含或相離時直接回傳小圓面積或 0。直線與圓求交時，先將圓心投影到直線，再依畢氏定理沿直線向兩側走。
+## 手推
+單位圓和 x 軸的投影點在原點，延伸距離 1，因此交點是 (-1,0) 和 (1,0)。
+## 成本
+每次 O(1)。line_circle 處理無限延伸直線；若題目給的是線段，再篩掉線段範圍外的點。
+`);
+
+add("disk-polygon","圓與多邊形交集面積","計算幾何",`
+#include <algorithm>
+#include <cmath>
+#include <vector>
+struct Point { double x,y; };
+double disk_polygon(std::vector<Point> polygon,Point center,double radius) {
+    if(polygon.size()<3 || radius<=0) return 0;
+    auto dot=[](Point a,Point b){return a.x*b.x+a.y*b.y;};
+    auto cross=[](Point a,Point b){return a.x*b.y-a.y*b.x;};
+    for(auto& p:polygon) { p.x-=center.x; p.y-=center.y; }
+    double sum=0,r2=radius*radius;
+    for(int i=0;i<(int)polygon.size();++i) {
+        Point a=polygon[i], b=polygon[(i+1)%polygon.size()], d{b.x-a.x,b.y-a.y};
+        double A=dot(d,d),B=2*dot(a,d),C=dot(a,a)-r2;
+        if(!A) continue;
+        auto at=[&](double t){return Point{a.x+t*d.x,a.y+t*d.y};};
+        std::vector<double> cut{0,1};
+        double discriminant=B*B-4*A*C;
+        if(discriminant>=0) for(double sign:{-1.,1.}) {
+            double t=(-B+sign*std::sqrt(discriminant))/(2*A);
+            if(0<t && t<1) cut.push_back(t);
+        }
+        std::sort(cut.begin(),cut.end());
+        for(int j=1;j<(int)cut.size();++j) {
+            Point u=at(cut[j-1]),v=at(cut[j]),mid=at((cut[j-1]+cut[j])/2);
+            if(dot(mid,mid)<r2) sum+=cross(u,v);
+            else sum+=r2*std::atan2(cross(u,v),dot(u,v));
+        }
+    }
+    return std::abs(sum)/2;
+}
+`,`
+## 原理
+把圓心移到原點。每條多邊形邊和原點構成有向三角形。用圓和線段的交點切開邊，圓內部分累計三角形面積，圓外部分累計扇形面積。最後加總有向貢獻。
+## 手推
+大正方形完整包住單位圓時，四條邊都在圓外，各貢獻四分之一圓面積；結果為 π。
+## 成本
+O(n)。頂點要依邊界順序給出，適用簡單多邊形，需留意浮點誤差。
+`);
+
+add("range-min-add","懶標記線段樹 區間加與最小／最大值","資料結構",`
+#include <algorithm>
+#include <limits>
+#include <vector>
+struct RangeExtreme {
+    using T=long long;
+    struct Pair { T lo,hi; };
+    int n; std::vector<Pair> tree; std::vector<T> lazy;
+    explicit RangeExtreme(int size):n(size),tree(4*n,{0,0}),lazy(4*n) {}
+    static Pair combine(Pair a,Pair b) { return {std::min(a.lo,b.lo),std::max(a.hi,b.hi)}; }
+    void apply(int p,T d) { tree[p].lo+=d; tree[p].hi+=d; lazy[p]+=d; }
+    void push(int p) { apply(2*p,lazy[p]); apply(2*p+1,lazy[p]); lazy[p]=0; }
+    Pair walk(int p,int l,int r,int a,int b,T d,bool write) {
+        if(r<=a || b<=l) return {std::numeric_limits<T>::max(),std::numeric_limits<T>::min()};
+        if(a<=l && r<=b) {
+            if(write) apply(p,d);
+            return tree[p];
+        }
+        push(p);
+        int m=l+(r-l)/2;
+        Pair left=walk(2*p,l,m,a,b,d,write),right=walk(2*p+1,m,r,a,b,d,write);
+        tree[p]=combine(tree[2*p],tree[2*p+1]);
+        return combine(left,right);
+    }
+    void add(int l,int r,T delta) { if(l<r) walk(1,0,n,l,r,delta,true); }
+    Pair query(int l,int r) { return walk(1,0,n,l,r,0,false); }
+};
+`,`
+## 原理
+整段一起加 d 時，最小值與最大值都只加一次 d。先留在 lazy，未來要切開區間時再傳給子節點。父節點最小、最大分別由兩個孩子合併。
+## 手推
+[0,0,0,0] 的 [0,2) 加 4、[1,3) 減 2，得到 [4,2,-2,0]。全區間的最小值 -2、最大值 4。
+## 成本
+O(log n) 每次，O(n) 空間。n>0，查詢在 [0,n) 且非空。與區間和不同，apply 不乘區間長度。
+`);
