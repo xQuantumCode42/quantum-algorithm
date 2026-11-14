@@ -220,18 +220,18 @@ fn sample_cases(html: &str, codeforces: bool) -> Vec<Value> {
 async fn problem_page(link: &str) -> Result<String> {
     // Only the problem links recognized by the catalog are requested.
     let (_, _, url) = crate::problem_link(link).ok_or("不支援的題目網址。")?;
+    fetch_page(url.trim_end_matches('/')).await
+}
+
+async fn fetch_page(url: &str) -> Result<String> {
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(8))
         .build()
         .map_err(|e| e.to_string())?;
-    let mut response = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|_| "無法連到題庫。")?;
+    let mut response = client.get(url).send().await.map_err(|_| "無法連到題庫。")?;
     if !response.status().is_success() {
-        return Err("平台拒絕讀取範例，可手動匯入測資。".into());
+        return Err(format!("題庫回傳 HTTP {}", response.status().as_u16()));
     }
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| "無法讀取題目頁面。")? {
@@ -243,9 +243,79 @@ async fn problem_page(link: &str) -> Result<String> {
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
+fn mirror_content(html: &str, pid: &str) -> Option<(String, Vec<Value>)> {
+    let (_, context) = html.split_once("id=\"lentille-context\"")?;
+    let (_, context) = context.split_once('>')?;
+    let data: Value = serde_json::from_str(context.split_once("</script>")?.0).ok()?;
+    let problem = &data["data"]["problem"];
+    if problem["pid"].as_str()? != pid {
+        return None;
+    }
+    let content = &problem["content"];
+    let description = content["description"].as_str()?.trim();
+    if description.is_empty() {
+        return None;
+    }
+    let statement = [
+        ("背景", "background"),
+        ("題意", "description"),
+        ("輸入", "formatI"),
+        ("輸出", "formatO"),
+        ("限制與說明", "hint"),
+    ]
+    .into_iter()
+    .filter_map(|(label, key)| {
+        content[key]
+            .as_str()
+            .filter(|s| !s.trim().is_empty())
+            .map(|value| format!("{label}\n{value}"))
+    })
+    .collect::<Vec<_>>()
+    .join("\n\n");
+    let samples = problem["samples"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .take(12)
+        .filter_map(|row| Some(json!({"input":row[0].as_str()?,"expected":row[1].as_str()?})))
+        .collect();
+    Some((statement.chars().take(16000).collect(), samples))
+}
+
+async fn codeforces_content(id: &str, url: &str) -> Result<(String, Vec<Value>)> {
+    if let Ok(html) = problem_page(url).await {
+        if let Some((_, raw)) = html
+            .split_once("class=\"problem-statement\"")
+            .and_then(|(_, block)| block.split_once('>'))
+        {
+            let raw = raw.split_once("</form>").map_or(raw, |(before, _)| before);
+            let statement: String = pre_text(raw).chars().take(16000).collect();
+            let samples = sample_cases(raw, true);
+            if !statement.is_empty() && !samples.is_empty() {
+                return Ok((statement, samples));
+            }
+        }
+    }
+    let (contest, index) = id
+        .strip_prefix("cf:")
+        .and_then(|id| id.split_once('/'))
+        .ok_or("Codeforces 題號無效。")?;
+    let pid = format!("CF{contest}{index}");
+    let page = fetch_page(&format!("https://www.luogu.com.cn/problem/{pid}"))
+        .await
+        .map_err(|reason| format!("Codeforces 題目頁無法讀取，洛谷備援也失敗（{reason}）。"))?;
+    mirror_content(&page, &pid).ok_or_else(|| "Codeforces 與洛谷未提供可讀取的題面。".into())
+}
+
 pub async fn problem_statement(problem: &crate::Problem) -> Option<String> {
     let (id, platform, url) = crate::problem_link(&problem.url)?;
-    let raw = if platform == "lc" {
+    if platform == "cf" {
+        return codeforces_content(&id, &url)
+            .await
+            .ok()
+            .map(|(statement, _)| statement);
+    }
+    let raw = {
         let host = reqwest::Url::parse(&url).ok()?.host_str()?.to_owned();
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
@@ -269,16 +339,6 @@ pub async fn problem_statement(problem: &crate::Problem) -> Option<String> {
         }
         let body: Value = serde_json::from_slice(&bytes).ok()?;
         body["data"]["question"]["content"].as_str()?.to_owned()
-    } else {
-        let page = problem_page(&url).await.ok()?;
-        let (_, statement) = page.split_once("class=\"problem-statement\"")?;
-        let (_, statement) = statement.split_once('>')?;
-        statement
-            .split("class=\"sample-test\"")
-            .next()?
-            .split("</form>")
-            .next()?
-            .to_owned()
     };
     let statement = pre_text(&raw).chars().take(16000).collect::<String>();
     (!statement.trim().is_empty()).then_some(statement)
@@ -287,10 +347,16 @@ pub async fn problem_statement(problem: &crate::Problem) -> Option<String> {
 #[tauri::command]
 pub async fn import_samples(app: State<'_, App>, id: String) -> Result<Vec<Value>> {
     let problem = app.problem(&id)?;
-    let page = problem_page(&problem.url).await?;
-    let bytes = page.as_bytes();
-    let html = String::from_utf8_lossy(&bytes);
-    let mut cases = sample_cases(&html, problem.platform == "cf");
+    if problem.platform == "cf" {
+        let (id, _, url) = crate::problem_link(&problem.url).ok_or("不支援的題目網址。")?;
+        let (_, samples) = codeforces_content(&id, &url).await?;
+        if samples.is_empty() {
+            return Err("這道題沒有可匯入的範例。".into());
+        }
+        return Ok(samples);
+    }
+    let html = problem_page(&problem.url).await?;
+    let mut cases = sample_cases(&html, false);
     if cases.is_empty() && problem.platform == "lc" {
         let decoded = html
             .replace("\\u003c", "<")
@@ -329,6 +395,27 @@ mod tests {
         assert_eq!(result["ok"], true);
         assert_eq!(result["results"][0]["status"], "通過");
         assert_eq!(result["results"][1]["status"], "輸出不符");
+    }
+
+    #[test]
+    fn mirror_validates_problem_and_extracts_statement_and_samples() {
+        let html = r#"<script type="application/json" id="lentille-context">{"data":{"problem":{"pid":"CF474B","content":{"description":"Find the pile.","formatI":"An integer n.","formatO":"Print the index."},"samples":[["2\n","1\n"]]}}}</script>"#;
+        let (statement, cases) = mirror_content(html, "CF474B").unwrap();
+        assert!(statement.contains("Find the pile.") && statement.contains("An integer n."));
+        assert_eq!(cases, vec![json!({"input":"2\n","expected":"1\n"})]);
+        assert!(mirror_content(html, "CF474C").is_none());
+    }
+
+    #[test]
+    #[ignore = "requires public problem-site network access"]
+    fn reads_live_codeforces_statement_and_samples() {
+        let (statement, cases) = tauri::async_runtime::block_on(codeforces_content(
+            "cf:474/B",
+            "https://codeforces.com/problemset/problem/474/B/",
+        ))
+        .unwrap();
+        assert!(statement.contains("Marmot"));
+        assert_eq!(cases[0]["expected"].as_str().unwrap().trim(), "1\n5\n3");
     }
 
     #[test]
