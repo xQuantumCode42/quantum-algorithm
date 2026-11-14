@@ -58,6 +58,50 @@ pub struct Session {
     selected: String,
 }
 
+#[derive(Deserialize, Serialize)]
+struct StoredSession {
+    refresh: String,
+    selected: String,
+}
+
+fn credential(saved: &Registration) -> Result<keyring::Entry> {
+    keyring::Entry::new("app.quantum.algorithm.chatgpt", &saved.host)
+        .map_err(|_| "無法開啟系統憑證庫。".into())
+}
+
+fn remember(saved: &Registration, refresh: &str, selected: &str) -> Result<()> {
+    let value = serde_json::to_string(&StoredSession { refresh: refresh.into(), selected: selected.into() })
+        .map_err(|_| "無法準備登入資料。")?;
+    credential(saved)?.set_password(&value).map_err(|_| "無法將登入儲存到系統憑證庫。".into())
+}
+
+async fn models(app: &App, access: &str) -> Result<Vec<Model>> {
+    let data = external(app.http.get(format!("{API}/models")).bearer_auth(access)).await?;
+    Ok(data["models"].as_array().into_iter().flatten().filter(|m| m["visibility"] == "list")
+        .filter_map(|m| Some(Model { slug: m["slug"].as_str()?.into(), name: m["display_name"].as_str()?.into() }))
+        .collect())
+}
+
+async fn restore(app: &App, saved: &Registration) -> Result<Option<Session>> {
+    if saved.client.is_empty() || saved.host.is_empty() { return Ok(None); }
+    let raw = match credential(saved)?.get_password() {
+        Ok(raw) => raw,
+        Err(keyring::Error::NoEntry) => return Ok(None),
+        Err(_) => return Err("無法讀取系統憑證庫。".into()),
+    };
+    let stored: StoredSession = serde_json::from_str(&raw).map_err(|_| "無法讀取已儲存的登入。")?;
+    let grant = exchange(app, &[("grant_type","refresh_token"),("client_id",&saved.client),
+        ("refresh_token",&stored.refresh),("resource",API)]).await?;
+    grant_permission(&grant, true)?;
+    let refresh = grant.refresh_token.unwrap_or(stored.refresh);
+    remember(saved, &refresh, &stored.selected)?;
+    let models = models(app, &grant.access_token).await?;
+    let selected = models.iter().find(|model| model.slug == stored.selected).or_else(|| models.first())
+        .ok_or("這個 ChatGPT 帳號目前沒有可使用的模型。")?.slug.clone();
+    Ok(Some(Session { client: saved.client.clone(), email: saved.email.clone(), access: grant.access_token,
+        refresh: Some(refresh), expires: chrono::Utc::now().timestamp().saturating_add(grant.expires_in), models, selected }))
+}
+
 fn grant_permission(grant: &Grant, inherited: bool) -> Result<()> {
     if grant.access_token.is_empty() || grant.expires_in <= 0 {
         return Err("ChatGPT 回傳的授權憑證無效。".into());
@@ -193,15 +237,19 @@ pub async fn chatgpt_sign_in(window: AppHandle, app: State<'_, App>, new_account
         issued, &nonce).await?;
     if returning && saved.subject != identity.sub { return Err("登入帳號與上次的帳號不符。".into()); }
     grant_permission(&grant, false)?;
-    let model_data = external(app.http.get(format!("{API}/models")).bearer_auth(&grant.access_token)).await?;
-    let models: Vec<Model> = model_data["models"].as_array().into_iter().flatten()
-        .filter(|m| m["visibility"] == "list")
-        .filter_map(|m| Some(Model { slug: m["slug"].as_str()?.into(), name: m["display_name"].as_str()?.into() }))
-        .collect();
+    let models = models(&app, &grant.access_token).await?;
     let selected = models.first().ok_or("這個 ChatGPT 帳號目前沒有可使用的模型。")?.slug.clone();
     saved.client = issued.into();
     saved.subject = identity.sub;
     saved.email = identity.email.unwrap_or_default();
+    if let Some(refresh) = grant.refresh_token.as_deref() {
+        remember(&saved, refresh, &selected)?;
+    } else {
+        match credential(&saved)?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => (),
+            Err(_) => return Err("無法清除舊的登入憑證。".into()),
+        }
+    }
     save_registration(&app, &saved)?;
     *active = Some(Session { client: saved.client, email: saved.email, access: grant.access_token,
         refresh: grant.refresh_token, expires: chrono::Utc::now().timestamp().saturating_add(grant.expires_in), models, selected });
@@ -209,11 +257,15 @@ pub async fn chatgpt_sign_in(window: AppHandle, app: State<'_, App>, new_account
 }
 
 pub async fn info(app: &App) -> Value {
-    let session = app.chatgpt.lock().await;
+    let mut session = app.chatgpt.lock().await;
+    let saved = registration(app).unwrap_or_default();
+    if session.is_none() && !*app.chatgpt_restore_attempted.lock().unwrap() {
+        *app.chatgpt_restore_attempted.lock().unwrap() = true;
+        *session = restore(app, &saved).await.ok().flatten();
+    }
     match session.as_ref() {
         Some(s) => json!({"connected":true,"registered":true,"email":s.email,"models":s.models,"selected":s.selected}),
         None => {
-            let saved = registration(app).unwrap_or_default();
             json!({"connected":false,"registered":!saved.client.is_empty(),"email":saved.email,"models":[],"selected":""})
         },
     }
@@ -224,6 +276,9 @@ pub async fn chatgpt_model(app: State<'_, App>, model: String) -> Result<()> {
     let mut guard = app.chatgpt.lock().await;
     let active = guard.as_mut().ok_or("請先登入 ChatGPT。")?;
     if !active.models.iter().any(|m| m.slug == model) { return Err("這個帳號沒有該模型。".into()); }
+    if let Some(refresh) = active.refresh.as_deref() {
+        remember(&registration(&app)?, refresh, &model)?;
+    }
     active.selected = model;
     Ok(())
 }
@@ -231,6 +286,14 @@ pub async fn chatgpt_model(app: State<'_, App>, model: String) -> Result<()> {
 #[tauri::command]
 pub async fn chatgpt_sign_out(app: State<'_, App>) -> Result<bool> {
     let mut guard = app.chatgpt.lock().await;
+    let saved = registration(&app)?;
+    if !saved.host.is_empty() {
+        match credential(&saved)?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => (),
+            Err(_) => return Err("無法從系統憑證庫移除登入。".into()),
+        }
+    }
+    *app.chatgpt_restore_attempted.lock().unwrap() = true;
     let Some(active) = guard.take() else { return Ok(true); };
     let Some(refresh) = active.refresh else { return Ok(true); };
     let Ok(discovery) = external(app.http.get(format!("{ISSUER}/.well-known/openid-configuration"))).await else {
@@ -296,7 +359,10 @@ pub async fn ask(app: &App, instructions: &str, payload: Value) -> Result<String
                 .map_err(|e| format!("無法續期 ChatGPT 授權，請重新登入。{e}"))?;
             grant_permission(&grant, true)?;
             active.access = grant.access_token;
-            if grant.refresh_token.is_some() { active.refresh = grant.refresh_token; }
+            if let Some(refresh) = grant.refresh_token {
+                active.refresh = Some(refresh);
+                remember(&registration(app)?, active.refresh.as_deref().unwrap(), &active.selected)?;
+            }
             active.expires = chrono::Utc::now().timestamp().saturating_add(grant.expires_in);
         }
         (active.access.clone(), active.selected.clone())

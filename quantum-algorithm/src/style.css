@@ -148,3 +148,6 @@ details button { margin-top: 8px; }
 @media (max-width: 720px) {
   .template-popup { left: 15px !important; right: 15px; width: auto; }
 }
+
+.markdown img { display: block; max-width: 100%; height: auto; }
+.markdown .katex-display { overflow-x: auto; overflow-y: hidden; }

@@ -4,6 +4,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import { CppEditor, Graph, type GraphFormat, type TestCase } from "./practice";
 import { TemplateLibrary } from "./template-library";
 import "./style.css";
@@ -49,15 +52,19 @@ function Select({ label, options, value, change, disabled }: {
 }
 
 function Markdown({ text }: { text: string }) {
+  const math = text.replace(/(`+)[\s\S]*?\1|\\\[([\s\S]*?)\\\]|\\\(([^\n]*?)\\\)/g,
+    (match, code, block, inline) => code ? match : block !== undefined ? "\n\n$$\n" + block + "\n$$\n\n" : "$" + inline + "$");
   return <div className="markdown">
-    <ReactMarkdown skipHtml components={{
+    <ReactMarkdown skipHtml remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={{
       a: ({ children }) => <span>{children}</span>,
-      img: ({ alt }) => <span>{alt}</span>,
+      img: ({ src, alt }) => typeof src === "string" && /^https:\/\//i.test(src)
+        ? <img src={src} alt={alt ?? ""} loading="lazy" referrerPolicy="no-referrer"/>
+        : <span>{alt}</span>,
       pre: ({ children }) => <div className="code-block markdown-pre">{children}</div>,
       code: ({ className, children }) => className === "language-graph"
         ? <Graph text={String(children)} />
         : <code className={className}>{children}</code>,
-    }}>{text}</ReactMarkdown>
+    }}>{math}</ReactMarkdown>
   </div>;
 }
 
@@ -552,10 +559,16 @@ function App() {
             <button type="button" onClick={() => setShowNote(false)}>取消</button></div>
         </form>}
         <div className="chat" role="log" aria-label="對話紀錄，最新問答在上方">
-          {exchanges.length > 0 && <h3>AI 說明與圖示</h3>}
+          {exchanges.length > 0 && <div className="row title-row"><h3>AI 說明與圖示</h3>
+            <button type="button" disabled={!!busy} onClick={() => {
+              if (window.confirm("清除這道題的所有 AI 對話？")) setExchanges([]);
+            }}>清除全部對話</button></div>}
           {exchanges.slice().reverse().map((exchange, index) =>
             <article className="exchange" key={exchanges.length - 1 - index}>
-              <div className="turn user"><strong>你</strong><Markdown text={exchange.question}/></div>
+              <div className="turn user"><div className="row title-row"><strong>你</strong>
+                <button type="button" disabled={!!busy} onClick={() =>
+                  setExchanges(previous => previous.filter((_, i) => i !== exchanges.length - 1 - index))
+                }>刪除此筆對話</button></div><Markdown text={exchange.question}/></div>
               <div className="turn"><strong>{exchange.source}</strong><Markdown text={exchange.reply}/></div>
             </article>
           )}
@@ -650,7 +663,7 @@ function App() {
           })}>登出</button>}
           <button disabled={!!busy} onClick={() => void run("正在開啟 ChatGPT…", () => openJudge("chatgpt", "usage"))}>管理用量 ↗</button>
         </div>
-        <p className="muted">連線憑證只保留在本次工作階段。AI 功能會把相關題目、對話或筆記送到 OpenAI。</p>
+        <p className="muted">登入續期憑證保存在系統憑證庫，重開時會自動恢復登入。AI 功能會把相關題目、對話或筆記送到 OpenAI。</p>
       </section>
     </div></>;
 
