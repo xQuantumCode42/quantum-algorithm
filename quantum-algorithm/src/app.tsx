@@ -1,14 +1,16 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import ReactMarkdown from "react-markdown";
+import { CppEditor, Graph, type GraphFormat, type TestCase } from "./practice";
 import "./style.css";
 
 type Page = "practice" | "notes" | "settings";
 type Mode = "hint" | "solution";
 type Problem = { id: string; title: string; platform: "lc" | "cf"; topic: string; level: number; focus: string; rating?: number };
-type Note = { problem: string; topic: string; language: string; date: string; result: string; focus: string; observation: string };
+type Note = { problem: string; topic: string; language: string; date: string; result: string; focus: string; observation: string; workspace?: Workspace };
 type AppState = {
   problems: Problem[]; topics: Record<string, { name: string; slug: string; cf: string }>; focuses: Record<string, string>;
   results: [string, string][]; languages: string[]; notes: [string, Note][]; path: string;
@@ -17,6 +19,11 @@ type AppState = {
 };
 type Selection = { items: Problem[]; reason: string; topic?: string; source?: string };
 type Exchange = { question: string; reply: string; source: string };
+
+type Workspace = {
+  code: string; statement: string; question: string; exchanges: Exchange[]; mode: Mode;
+  cases: TestCase[]; graph: string; graphFormat: GraphFormat; directed: boolean;
+};
 
 const platform = { lc: "LeetCode", cf: "Codeforces" };
 const command = <T,>(name: string, data?: Record<string, unknown>) => invoke<T>(name, data);
@@ -45,7 +52,10 @@ function Markdown({ text }: { text: string }) {
     <ReactMarkdown skipHtml components={{
       a: ({ children }) => <span>{children}</span>,
       img: ({ alt }) => <span>{alt}</span>,
-      pre: ({ children }) => <pre className="code-block">{children}</pre>,
+      pre: ({ children }) => <div className="code-block markdown-pre">{children}</div>,
+      code: ({ className, children }) => className === "language-graph"
+        ? <Graph text={String(children)} />
+        : <code className={className}>{children}</code>,
     }}>{text}</ReactMarkdown>
   </div>;
 }
@@ -84,11 +94,106 @@ function App() {
   const [searchResults, setSearchResults] = useState<Problem[]>();
   const [linkedTitle, setLinkedTitle] = useState("");
   const [linkedTopic, setLinkedTopic] = useState("array");
+  const [cases, setCases] = useState<TestCase[]>([]);
+  const [graph, setGraph] = useState("");
+  const [graphFormat, setGraphFormat] = useState<GraphFormat>("edges");
+  const [directed, setDirected] = useState(false);
+  const [sampleStatus, setSampleStatus] = useState("");
+  const [sampleRetry, setSampleRetry] = useState(0);
+  const [saveStatus, setSaveStatus] = useState("");
+  const noteFile = useRef("");
+  const savedSnapshot = useRef("");
+  const queuedSnapshot = useRef("");
+  const writeQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const session = useRef(0);
+  const attemptedSample = useRef("");
+  const workspace: Workspace = { code, statement, question, exchanges, mode, cases, graph, graphFormat, directed };
+  const noteContent = JSON.stringify({ observation, focus, result, language: practiceLanguage, workspace });
+  const hasContent = Boolean(observation.trim() || code.trim() || statement.trim() || question.trim()
+    || exchanges.length || graph.trim() || cases.length);
+
+  useEffect(() => {
+    if (!problem || cases.length || attemptedSample.current === `${problem.id}:${sampleRetry}`) return;
+    const current = session.current;
+    attemptedSample.current = `${problem.id}:${sampleRetry}`;
+    setSampleStatus("正在匯入範例…");
+    command<TestCase[]>("import_samples", { id: problem.id }).then(samples => {
+      if (session.current !== current) return;
+      setCases(previous => previous.length ? previous : samples);
+      setSampleStatus(problem.platform === "lc" ? "已匯入範例。LeetCode 的函式題需要自己寫 main() 讀取並轉換輸入。" : "已匯入範例測資。");
+    }, reason => { if (session.current === current) setSampleStatus(String(reason)); });
+  }, [problem, cases.length, sampleRetry]);
+
+  function persistNote() {
+    if (!problem || (!hasContent && !noteFile.current && !queuedSnapshot.current)) return Promise.resolve();
+    if (queuedSnapshot.current === noteContent) return writeQueue.current;
+    if (!queuedSnapshot.current && savedSnapshot.current === noteContent) return Promise.resolve();
+    const current = session.current;
+    setSaveStatus("儲存中…");
+    queuedSnapshot.current = noteContent;
+    const write = writeQueue.current.catch(() => {}).then(async () => {
+      if (session.current !== current || savedSnapshot.current === noteContent) return;
+      const file = await payload<string>("save_note", {
+        file: noteFile.current, problem: problem.id, language: practiceLanguage, topic: practiceTopic,
+        focus, result, observation, workspace,
+      });
+      if (session.current !== current) return;
+      noteFile.current = file;
+      savedSnapshot.current = noteContent;
+      setViewNote(file);
+      setSaveStatus("已自動儲存");
+    });
+    const pending = write.catch(reason => {
+      if (session.current === current) setSaveStatus("自動儲存失敗：" + String(reason));
+      throw reason;
+    }).finally(() => {
+      if (writeQueue.current === pending) queuedSnapshot.current = "";
+    });
+    writeQueue.current = pending;
+    return pending;
+  }
+
+  useEffect(() => {
+    if (!problem || (!hasContent && !noteFile.current && !queuedSnapshot.current)) return;
+    const timer = window.setTimeout(() => { void persistNote().catch(() => {}); }, 500);
+    return () => window.clearTimeout(timer);
+  }, [problem, noteContent, hasContent]);
 
   const notify = (text: string) => setStatus({ text, error: false });
   const error = (reason: unknown) => setStatus({ text: String(reason), error: true });
 
+  const flushNote = useRef(persistNote);
+  flushNote.current = persistNote;
+  useEffect(() => {
+    const window = getCurrentWindow();
+    let closing = false;
+    const unsubscribe = window.onCloseRequested(async event => {
+      if (closing) return;
+      event.preventDefault();
+      try {
+        await flushNote.current();
+        closing = true;
+        await window.destroy();
+      } catch (reason) {
+        closing = false;
+        error(reason);
+      }
+    });
+    void unsubscribe.catch(error);
+    return () => { void unsubscribe.then(stop => stop()).catch(() => {}); };
+  }, []);
+
   function choose(next: Problem | undefined, lang: string, selectedTopic: string) {
+    session.current++;
+    noteFile.current = "";
+    savedSnapshot.current = "";
+    attemptedSample.current = "";
+    setCases([]);
+    setGraph("");
+    setGraphFormat("edges");
+    setDirected(false);
+    setSampleStatus("");
+    setSaveStatus("");
     setProblem(next);
     setPracticeLanguage(lang);
     setPracticeTopic(selectedTopic);
@@ -131,10 +236,41 @@ function App() {
     try { await task(); } catch (reason) { error(reason); }
     finally { setBusy(undefined); }
   }
-  function confirmSwitch() {
-    return !(exchanges.length || observation.trim() || code.trim() || question.trim() || statement.trim())
-      || window.confirm("換題會清除目前對話與未儲存的內容。確定換題？");
+  async function confirmSwitch() {
+    try { await persistNote(); return true; }
+    catch (reason) { error(reason); return false; }
   }
+
+  async function resumeNote(file: string, note: Note) {
+    const next = data?.problems.find(p => p.id === note.problem);
+    if (!next || !await confirmSwitch()) return;
+    if (file === noteFile.current) { setPage("practice"); setShowNote(true); return; }
+    choose(next, note.language, note.topic);
+    noteFile.current = file;
+    const saved = note.workspace;
+    const restored: Workspace = {
+      code: saved?.code ?? "", statement: saved?.statement ?? "", question: saved?.question ?? "",
+      exchanges: saved?.exchanges ?? [], mode: saved?.mode ?? "hint", cases: saved?.cases ?? [],
+      graph: saved?.graph ?? "", graphFormat: saved?.graphFormat ?? "edges", directed: saved?.directed ?? false,
+    };
+    savedSnapshot.current = JSON.stringify({ observation: note.observation, focus: note.focus, result: note.result, language: note.language, workspace: restored });
+    setCode(restored.code);
+    setStatement(restored.statement);
+    setQuestion(restored.question);
+    setExchanges(restored.exchanges);
+    setMode(restored.mode);
+    setCases(restored.cases);
+    setGraph(restored.graph);
+    setGraphFormat(restored.graphFormat);
+    setDirected(restored.directed);
+    setObservation(note.observation);
+    setFocus(note.focus);
+    setResult(note.result);
+    setSelection(empty);
+    setPage("practice");
+    setShowNote(true);
+  }
+
   function startProblemNote(next: Problem) {
     setSelection(empty);
     choose(next, language, next.topic);
@@ -144,14 +280,14 @@ function App() {
     setLinkedTitle("");
   }
 
-  function changeJudge(next: string) {
-    if (!confirmSwitch()) return;
+  async function changeJudge(next: string) {
+    if (!await confirmSwitch()) return;
     setJudge(next);
     setSelection(empty);
     choose(undefined, language, topic);
   }
-  function recommend() {
-    if (!confirmSwitch()) return;
+  async function recommend() {
+    if (!await confirmSwitch()) return;
     void run("正在選題…", async () => {
       const picks = await payload<Selection>("recommend", {
         topic, platform: judge, language, level: Number(judge === "cf" ? rating : level), ai: !!data?.ai.connected && aiPick,
@@ -184,12 +320,9 @@ function App() {
   function saveNote() {
     if (!problem) return;
     void run("正在儲存筆記…", async () => {
-      const file = await payload<string>("save_note", { problem: problem.id, language: practiceLanguage, topic: practiceTopic, focus, result, observation });
-      setObservation("");
-      setShowNote(false);
+      await persistNote();
       await refresh();
-      notify("筆記已儲存。下次選題會參考這次的學習觀察。");
-      setViewNote(file);
+      notify("筆記已儲存。");
     });
   }
 
@@ -198,6 +331,7 @@ function App() {
     void run("正在刪除筆記…", async () => {
       await command("delete_note", { file });
       setData(previous => previous && { ...previous, notes: previous.notes.filter(([name]) => name !== file) });
+      if (noteFile.current === file) choose(undefined, practiceLanguage, practiceTopic);
       setViewNote("");
       notify("筆記已移到 .quantum-trash。後續選題將略過這份筆記。");
     });
@@ -231,9 +365,9 @@ function App() {
         <button disabled={!!busy || !problemQuery.trim()}>搜尋</button>
       </form>
       {searchResults?.map(p => <button key={p.id} type="button" className="candidate" disabled={!!busy}
-        onClick={() => {
+        onClick={async () => {
           if (p.id === problem?.id) setShowNote(true);
-          else if (confirmSwitch()) startProblemNote(p);
+          else if (await confirmSwitch()) startProblemNote(p);
         }}>
         <span>{p.title}</span><small>{platform[p.platform]} · 記下這次練習</small>
       </button>)}
@@ -241,9 +375,9 @@ function App() {
         <p className="muted">{/^https?:\/\//i.test(problemQuery)
           ? "題庫沒有這道題。填寫題名和主題即可新增筆記。"
           : "沒有符合的題目。可以貼上 LeetCode 或 Codeforces 的原題網址。"}</p>
-        {/^https?:\/\//i.test(problemQuery) && <form className="problem-search-fields" onSubmit={e => {
+        {/^https?:\/\//i.test(problemQuery) && <form className="problem-search-fields" onSubmit={async e => {
           e.preventDefault();
-          if (!confirmSwitch()) return;
+          if (!await confirmSwitch()) return;
           void run("正在加入題目…", async () => {
             const next = await payload<Problem>("add_linked_problem", {
               link: problemQuery, title: linkedTitle, topic: linkedTopic,
@@ -263,7 +397,7 @@ function App() {
       <section className="panel shortlist">
         <h2>推薦題目</h2><p className="reason">{selection.reason}</p>
         {selection.items.map(p => <button key={p.id} type="button" className="candidate" aria-pressed={p.id === problem?.id}
-          disabled={!!busy} onClick={() => { if (p.id !== problem?.id && confirmSwitch()) choose(p, practiceLanguage, practiceTopic); }}>
+          disabled={!!busy} onClick={async () => { if (p.id !== problem?.id && await confirmSwitch()) choose(p, practiceLanguage, practiceTopic); }}>
           <span>{p.title}</span><small>{platform[p.platform]} · {p.rating ?? stars(p.level)} · {data.focuses[p.focus]}</small>
         </button>)}
         <div className="row action-row">
@@ -285,9 +419,53 @@ function App() {
         </div><small>{mode === "hint" ? (data.ai.connected ? "一次給一個方向" : "目前使用內建提示") : "完整程式碼與測例"}</small></div>
         <details className="section"><summary>補充題意或貼上程式碼</summary>
           <label className="field">題意、限制或函式簽名<textarea rows={3} value={statement} maxLength={10000} onChange={e => setStatement(e.target.value)}/></label>
-          <label className="field">程式碼<textarea className="editor" rows={6} value={code} maxLength={18000} spellCheck={false} onChange={e => setCode(e.target.value)}/></label>
+
           <button disabled={!!busy || !data.ai.connected || !code.trim()} onClick={() => coach("review")}>審閱程式碼</button>
         </details>
+        <section className="section practice-tools">
+          <small role="status">{saveStatus}</small>
+          {practiceLanguage === "C++"
+            ? <CppEditor key={problem.id} code={code} change={setCode} cases={cases}/>
+            : <><label className="field">程式碼<textarea rows={6} value={code} maxLength={18000} spellCheck={false}
+                onChange={e => setCode(e.target.value)}/></label>
+              <button type="button" onClick={() => setPracticeLanguage("C++")}>切換到 C++ 編輯器</button></>}
+          <details><summary>範例與手動測資（{cases.length}）</summary>
+            <p role="status">{sampleStatus}</p>
+            {cases.length === 0 && <button type="button" onClick={() => setSampleRetry(n => n + 1)}>重新匯入範例</button>}
+            {cases.map((test, i) => <div className="section" key={i}>
+              <label className="field">測資 {i + 1} 輸入<textarea rows={3} value={test.input} maxLength={16000}
+                onChange={e => setCases(rows => rows.map((row, j) => j === i ? { ...row, input: e.target.value } : row))}/></label>
+              <label className="field">預期輸出（留空只執行）<textarea rows={2} value={test.expected ?? ""} maxLength={16000}
+                onChange={e => setCases(rows => rows.map((row, j) => j === i ? { ...row, expected: e.target.value || null } : row))}/></label>
+              <button type="button" onClick={() => setCases(rows => rows.filter((_, j) => j !== i))}>移除測資</button>
+            </div>)}
+            <div className="row action-row">
+              <button type="button" disabled={cases.length >= 12}
+                onClick={() => setCases(rows => [...rows, { input: "", expected: null }])}>新增測資</button>
+              <label className="field">匯入測資檔
+                <input type="file" disabled={cases.length >= 12} onChange={async e => {
+                  const file = e.currentTarget.files?.[0];
+                  e.currentTarget.value = "";
+                  if (!file) return;
+                  if (file.size > 64000) { error("測資檔不可超過 64 KB。"); return; }
+                  const current = session.current;
+                  try {
+                    const input = await file.text();
+                    if (session.current === current) setCases(rows => rows.length >= 12 ? rows : [...rows, { input, expected: null }]);
+                  } catch (reason) { error(reason); }
+                }}/></label>
+            </div>
+          </details>
+          <details open={!!graph}><summary>圖形視覺化</summary>
+            <Select label="輸入格式" options={[["edges", "邊列表（u v [w]）"], ["counted", "n m + 邊列表"],
+              ["matrix", "鄰接矩陣（0 無邊）"], ["adjacency", "鄰接串列（u: v w）"]]}
+              value={graphFormat} change={value => setGraphFormat(value as GraphFormat)}/>
+            <label><input type="checkbox" checked={directed} onChange={e => setDirected(e.target.checked)}/> 有向圖</label>
+            <textarea aria-label="圖資料" rows={4} value={graph} maxLength={16000} onChange={e => setGraph(e.target.value)}/>
+            {cases.length > 0 && <button type="button" onClick={() => setGraph(cases[0].input)}>載入第一組測資</button>}
+            <Graph text={graph} format={graphFormat} directed={directed}/>
+          </details>
+        </section>
         <form className="section" onSubmit={e => { e.preventDefault(); coach("chat"); }}>
           {data.ai.connected && <small>使用 ChatGPT 訂閱用量</small>}
           <label className="field">你卡在哪一步？<textarea placeholder="例如：我的搜尋區間什麼時候應該停止？" rows={2}
@@ -304,11 +482,12 @@ function App() {
             <Select label="要驗證的觀念" options={Object.entries(data.focuses)} value={focus} change={setFocus}/></div>
           <label className="field note-editor">學習觀察<textarea autoFocus rows={4} value={observation} maxLength={6000}
             placeholder="我在哪一步卡住？下一題想驗證什麼？" onChange={e => setObservation(e.target.value)}/></label>
-          <div className="row action-row"><button className="primary" disabled={!!busy || !observation.trim()}>儲存 Markdown</button>
+          <div className="row action-row"><button className="primary" disabled={!!busy || !hasContent}>儲存 Markdown</button>
             <button type="button" disabled={!data.ai.connected || !!busy || !exchanges.length} onClick={() => coach("draft")}>用討論草擬</button>
             <button type="button" onClick={() => setShowNote(false)}>取消</button></div>
         </form>}
         <div className="chat" role="log" aria-label="對話紀錄，最新問答在上方">
+          {exchanges.length > 0 && <h3>AI 說明與圖示</h3>}
           {exchanges.slice().reverse().map((exchange, index) =>
             <article className="exchange" key={exchanges.length - 1 - index}>
               <div className="turn user"><strong>你</strong><Markdown text={exchange.question}/></div>
@@ -336,18 +515,29 @@ function App() {
       </section>
       {current && <article className="panel"><div className="row title-row">
         <h2>{data.problems.find(p => p.id === current[1].problem)?.title}</h2>
+        <button type="button" disabled={!!busy} onClick={() => void resumeNote(...current)}>接續練習</button>
         <button type="button" className="danger" disabled={!!busy} onClick={() => deleteNote(current[0])}>刪除筆記</button>
         </div>
         <p className="muted">{current[1].language} · {data.results.find(([id]) => id === current[1].result)?.[1]}</p>
-        <Markdown text={current[1].observation}/></article>}</div></>;
+        <Markdown text={current[1].observation}/>
+        {current[1].workspace?.graph && <Graph text={current[1].workspace.graph}
+          format={current[1].workspace.graphFormat} directed={current[1].workspace.directed}/>}
+        {current[1].workspace?.exchanges.map((exchange, i) => <details key={i}><summary>{exchange.question}</summary>
+          <Markdown text={exchange.reply}/></details>)}</article>}</div></>;
   }
 
   if (data && page === "settings") content = <>
     <header className="heading"><div><h1>設定</h1><p>管理筆記路徑、刷題平台和 AI 教練。</p></div></header>
     <div className="settings-grid">
       <form className="panel" onSubmit={e => { e.preventDefault(); void run("正在儲存設定…", async () => {
+        await persistNote();
         await payload("save_settings", { lc, cf, notes: notesPath });
-        await refresh();
+        const updated = await command<AppState>("app_state");
+        if (updated.path !== data.path) {
+          noteFile.current = "";
+          setSaveStatus("已儲存於原筆記資料夾");
+        }
+        setData(updated);
         notify("設定已儲存。");
       }); }}>
         <h2>刷題平台與筆記</h2>
@@ -402,7 +592,11 @@ function App() {
   return <div className="app">
     <aside className="sidebar"><div className="brand"><span className="logo" aria-hidden="true">Q</span><span>Quantum<br/>Algorithm</span></div>
       <nav aria-label="工作區">{pages.map(([id, icon, name]) => <button key={id} aria-current={page === id ? "page" : undefined}
-        onClick={() => { setPage(id); if (id === "notes") void refresh().catch(error); }}><span aria-hidden="true">{icon}</span>{name}</button>)}</nav>
+        onClick={async () => {
+          if (id !== "practice" && !await confirmSwitch()) return;
+          if (id === "notes") await refresh().catch(error);
+          setPage(id);
+        }}><span aria-hidden="true">{icon}</span>{name}</button>)}</nav>
     </aside>
     <main><div className="status" aria-live="polite">{(busy?.location === "page" && busy.label) || (status && <span className={status.error ? "error" : "success"}>{status.text}</span>)}</div>
       {content}</main>
